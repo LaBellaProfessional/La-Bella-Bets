@@ -1,0 +1,102 @@
+{
+  "banca": 1000,
+  "stake_padrao_pct": 3,
+  "stake_confianca_maxima_pct": 5,
+  "teto_exposicao_diaria_pct": 8,
+  "filtros": {
+    "odd_minima_perna": 1.2,
+    "ev_minimo": 1.03,
+    "divergencia_maxima_pp": 10,
+    "amostra_minima_mando": 7,
+    "odd_bilhete_min": 1.4,
+    "odd_bilhete_max": 1.6,
+    "max_bilhetes_dia": 3,
+    "confianca_maxima_prob": 0.8,
+    "confianca_maxima_ev": 0.06,
+    "ah_vantagem_minima_pp": 3,
+    "ev_teto_suspeito": 0.35
+  },
+  "pesos_heuristica": {
+    "mando": 0.5,
+    "geral": 0.3,
+    "h2h": 0.2,
+    "sem_h2h": {
+      "mando": 0.6,
+      "geral": 0.4
+    }
+  },
+  "dixon_coles": {
+    "xi": 0.0065,
+    "min_jogos_liga": 60,
+    "max_gols_matriz": 6
+  },
+  "mercados_em_bilhete": [
+    "dupla_chance_casa",
+    "dupla_chance_fora",
+    "over_05",
+    "over_15",
+    "under_45"
+  ],
+  "ligas": [
+    {
+      "id": 71,
+      "nome": "Brasileirão Série A",
+      "pais": "Brasil",
+      "ativa": true
+    },
+    {
+      "id": 72,
+      "nome": "Brasileirão Série B",
+      "pais": "Brasil",
+      "ativa": true
+    },
+    {
+      "id": 11,
+      "nome": "Copa Sul-Americana",
+      "pais": "América do Sul",
+      "ativa": true
+    },
+    {
+      "id": 13,
+      "nome": "Libertadores",
+      "pais": "América do Sul",
+      "ativa": true
+    },
+    {
+      "id": 2,
+      "nome": "Champions League",
+      "pais": "Europa",
+      "ativa": true
+    },
+    {
+      "id": 39,
+      "nome": "Premier League",
+      "pais": "Inglaterra",
+      "ativa": true
+    },
+    {
+      "id": 140,
+      "nome": "La Liga",
+      "pais": "Espanha",
+      "ativa": true
+    },
+    {
+      "id": 78,
+      "nome": "Bundesliga",
+      "pais": "Alemanha",
+      "ativa": true
+    },
+    {
+      "id": 61,
+      "nome": "Ligue 1",
+      "pais": "França",
+      "ativa": true
+    },
+    {
+      "id": 98,
+      "nome": "J-League",
+      "pais": "Japão",
+      "ativa": true
+    }
+  ]
+}

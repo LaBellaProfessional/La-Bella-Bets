@@ -1,0 +1,6 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { background: #0d0f14; color: #e8eaed; min-height: 100%; }
+body { font-family: Inter, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
