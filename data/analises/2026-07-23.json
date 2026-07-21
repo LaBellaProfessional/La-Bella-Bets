@@ -1,11 +1,11 @@
 {
   "data": "2026-07-23",
   "modo": "demo",
-  "gerado_em": "2026-07-21T15:09:03.498Z",
+  "gerado_em": "2026-07-21T15:24:07.397Z",
   "banca_no_momento": 1000,
   "config_efetivo": {
     "filtros": {
-      "odd_minima_perna": 1.2,
+      "odd_minima_perna": 1.1,
       "ev_minimo": 1.03,
       "divergencia_maxima_pp": 10,
       "amostra_minima_mando": 7,
@@ -35,10 +35,10 @@
   "resumo": {
     "jogos": 11,
     "pernas_avaliadas": 88,
-    "aprovadas": 3,
-    "descartadas": 85,
-    "bilhetes": 0,
-    "sem_bilhete": true
+    "aprovadas": 4,
+    "descartadas": 84,
+    "bilhetes": 1,
+    "sem_bilhete": false
   },
   "dixon_coles_por_liga": {
     "Brasileirão Série A": {
@@ -237,7 +237,7 @@
       "prob_dixon_coles": 0.9873012301262133,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-71-0",
@@ -329,7 +329,7 @@
       "prob_dixon_coles": 0.8161558333474901,
       "amostra_mando": 3,
       "aprovada": false,
-      "motivo": "odd 1.08 abaixo do mínimo 1.20"
+      "motivo": "odd 1.08 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-71-1",
@@ -359,7 +359,7 @@
       "prob_dixon_coles": 0.9670270378585297,
       "amostra_mando": 3,
       "aprovada": false,
-      "motivo": "odd 1.06 abaixo do mínimo 1.20"
+      "motivo": "odd 1.06 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-71-1",
@@ -449,7 +449,7 @@
       "prob_dixon_coles": 0.9621423016751399,
       "amostra_mando": 7,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-71-2",
@@ -464,7 +464,9 @@
       "prob_dixon_coles": 0.8702547318917923,
       "amostra_mando": 7,
       "aprovada": false,
-      "motivo": "odd 1.11 abaixo do mínimo 1.20"
+      "motivo": "EV -4.8% abaixo da margem mínima de 3.0%",
+      "prob_final": 0.8572702230887532,
+      "ev": 0.9515699476285162
     },
     {
       "jogo_id": "demo-71-2",
@@ -575,7 +577,9 @@
       "prob_dixon_coles": 0.7210983680395715,
       "amostra_mando": 10,
       "aprovada": false,
-      "motivo": "odd 1.17 abaixo do mínimo 1.20"
+      "motivo": "EV -9.8% abaixo da margem mínima de 3.0%",
+      "prob_final": 0.7705491840197858,
+      "ev": 0.9015425453031493
     },
     {
       "jogo_id": "demo-72-0",
@@ -605,7 +609,7 @@
       "prob_dixon_coles": 0.9909979575719036,
       "amostra_mando": 10,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-72-0",
@@ -697,7 +701,7 @@
       "prob_dixon_coles": 0.9497147458476835,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-72-1",
@@ -817,7 +821,7 @@
       "prob_dixon_coles": 0.9642450546572414,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.05 abaixo do mínimo 1.20"
+      "motivo": "odd 1.05 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-72-2",
@@ -832,7 +836,7 @@
       "prob_dixon_coles": 0.8093022199705717,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.12 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 6 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-72-2",
@@ -949,7 +953,7 @@
       "prob_dixon_coles": null,
       "amostra_mando": 7,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-11-0",
@@ -964,7 +968,7 @@
       "prob_dixon_coles": null,
       "amostra_mando": 7,
       "aprovada": false,
-      "motivo": "odd 1.07 abaixo do mínimo 1.20"
+      "motivo": "odd 1.07 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-11-0",
@@ -1077,7 +1081,7 @@
       "prob_dixon_coles": null,
       "amostra_mando": 3,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-11-1",
@@ -1092,7 +1096,7 @@
       "prob_dixon_coles": null,
       "amostra_mando": 3,
       "aprovada": false,
-      "motivo": "odd 1.10 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 3 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-11-1",
@@ -1107,7 +1111,7 @@
       "prob_dixon_coles": null,
       "amostra_mando": 3,
       "aprovada": false,
-      "motivo": "odd 1.14 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 3 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-11-1",
@@ -1196,8 +1200,14 @@
       "prob_heuristica": 0.9722222222222221,
       "prob_dixon_coles": 0.9091214130649002,
       "amostra_mando": 9,
-      "aprovada": false,
-      "motivo": "odd 1.10 abaixo do mínimo 1.20"
+      "aprovada": true,
+      "prob_final": 0.9406718176435611,
+      "ev": 1.0347389994079172,
+      "ev_pct": 3.473899940791725,
+      "confianca": "APROVADA",
+      "dixon_coles_disponivel": true,
+      "justificativa": "94% pelo modelo (heurística + Dixon-Coles), EV +3.5%, 9 jogos no mando.",
+      "elegivel_bilhete": true
     },
     {
       "jogo_id": "demo-98-0",
@@ -1227,7 +1237,7 @@
       "prob_dixon_coles": 0.9223182608323649,
       "amostra_mando": 9,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-98-0",
@@ -1319,7 +1329,7 @@
       "prob_dixon_coles": 0.9537449811560091,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-98-1",
@@ -1334,7 +1344,9 @@
       "prob_dixon_coles": 0.7580658324465698,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.18 abaixo do mínimo 1.20"
+      "motivo": "EV -14.9% abaixo da margem mínima de 3.0%",
+      "prob_final": 0.7215329162232849,
+      "ev": 0.851408841143476
     },
     {
       "jogo_id": "demo-98-1",
@@ -1445,7 +1457,7 @@
       "prob_dixon_coles": 0.9534197657994534,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.10 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 6 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-98-2",
@@ -1475,7 +1487,7 @@
       "prob_dixon_coles": 0.8473012598832891,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.11 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 6 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-98-2",
@@ -1523,14 +1535,72 @@
       "motivo": "amostra insuficiente no mando: 6 jogos (mínimo 7)"
     }
   ],
-  "bilhetes": [],
-  "sem_bilhete": {
-    "motivo": "há 3 perna(s) aprovada(s), mas nenhuma combinação fecha odd entre 1.4 e 1.6"
-  },
+  "bilhetes": [
+    {
+      "pernas": [
+        {
+          "jogo_id": "demo-11-0",
+          "partida": "Racing x Independiente",
+          "liga": "Copa Sul-Americana",
+          "hora": "15:30",
+          "casa": "Racing",
+          "fora": "Independiente",
+          "mercado": "dupla_chance_casa",
+          "odd": 1.37,
+          "prob_heuristica": 0.8230357142857143,
+          "prob_dixon_coles": null,
+          "amostra_mando": 7,
+          "aprovada": true,
+          "prob_final": 0.7818839285714285,
+          "ev": 1.071180982142857,
+          "ev_pct": 7.118098214285706,
+          "confianca": "APROVADA",
+          "dixon_coles_disponivel": false,
+          "justificativa": "78% pelo modelo (só heurística (liga sem amostra p/ DC)), EV +7.1%, 7 jogos no mando.",
+          "elegivel_bilhete": true
+        },
+        {
+          "jogo_id": "demo-98-0",
+          "partida": "Gamba Osaka x Kyoto Sanga",
+          "liga": "J-League",
+          "hora": "15:30",
+          "casa": "Gamba Osaka",
+          "fora": "Kyoto Sanga",
+          "mercado": "over_05",
+          "odd": 1.1,
+          "prob_heuristica": 0.9722222222222221,
+          "prob_dixon_coles": 0.9091214130649002,
+          "amostra_mando": 9,
+          "aprovada": true,
+          "prob_final": 0.9406718176435611,
+          "ev": 1.0347389994079172,
+          "ev_pct": 3.473899940791725,
+          "confianca": "APROVADA",
+          "dixon_coles_disponivel": true,
+          "justificativa": "94% pelo modelo (heurística + Dixon-Coles), EV +3.5%, 9 jogos no mando.",
+          "elegivel_bilhete": true
+        }
+      ],
+      "n_pernas": 2,
+      "odd_total": 1.5070000000000003,
+      "prob_combinada": 0.735496176275574,
+      "valor_justo": 1.3596263750327404,
+      "ev": 1.1083927376472902,
+      "ev_pct": 10.839273764729018,
+      "n_confianca_maxima": 0,
+      "todas_confianca_maxima": false,
+      "correlacao_intra_jogo": false,
+      "stake_pct": 3,
+      "stake_rs": 30,
+      "ordem": 1
+    }
+  ],
+  "sem_bilhete": null,
   "exposicao": {
-    "total_rs": 0,
-    "pct_banca": 0,
-    "teto_pct": 8
+    "total_rs": 30,
+    "pct_banca": 3,
+    "teto_pct": 8,
+    "teto_rs": 80
   },
   "cards_handicap": []
 }

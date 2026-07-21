@@ -18,7 +18,7 @@ import { probHeuristica } from './lib/heuristica.js';
 import { ajustarDixonColes, matrizPlacares, mercadosDaMatriz } from './lib/dixonColes.js';
 import { avaliarPerna } from './lib/filtros.js';
 import { montarBilhetes, cardsHandicap } from './lib/montador.js';
-import { temChaves, gerarDemo, lerCache, gravarCache, buscarJogosDoDia, buscarHistoricoTime } from './lib/fontes.js';
+import { temChaves, gerarDemo, lerCache, gravarCache, buscarJogosDoDia, buscarHistoricoTime, buscarOddsDosJogos, cota, limitacoesPlano } from './lib/fontes.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIR_DADOS = path.join(RAIZ, 'data');
@@ -47,13 +47,34 @@ async function main() {
   } else {
     const cache = lerCache(path.join(DIR_DADOS, 'historico_times.json'));
     jogos = await buscarJogosDoDia(ligasAtivas, dataAlvo);
-    historico = {}; h2h = {}; odds = {};
+    log(`   ${cota.football} req à API-Football (fixtures das ligas ativas)`);
+    historico = {}; h2h = {};
     for (const j of jogos) {
       historico[j.casa] = await buscarHistoricoTime(j.casa_id, j.casa, cache);
       historico[j.fora] = await buscarHistoricoTime(j.fora_id, j.fora, cache);
     }
     gravarCache(path.join(DIR_DADOS, 'historico_times.json'), cache);
-    log('   ⚠ odds reais: conectar The Odds API em fontes.js → buscarOdds() e mapear por partida.\n');
+    const res = await buscarOddsDosJogos(jogos);
+    odds = res.odds;
+    log(`   ${cota.football} req API-Football · ${cota.odds} req The Odds API (limite gratuito: 100/dia e 500/mês)`);
+    const comOdds = Object.keys(odds).length;
+    log(`   odds casadas: ${comOdds}/${jogos.length} jogos`);
+    if (res.diagnostico.length) {
+      log(`   ⚠ ${res.diagnostico.length} aviso(s) de odds:`);
+      res.diagnostico.slice(0, 5).forEach((d) => log(`      · ${d}`));
+    }
+    const semHistorico = jogos.filter((j) => !(historico[j.casa] ?? []).length).length;
+    if (limitacoesPlano.size) {
+      log('');
+      log('   ┌─ BLOQUEIO DO PLANO API-FOOTBALL ────────────────────────────────');
+      [...limitacoesPlano].forEach((m) => log(`   │ ${m}`));
+      log(`   │ ${semHistorico}/${jogos.length} jogos ficaram SEM histórico.`);
+      log('   │ Sem os últimos 10 jogos não há heurística nem Dixon-Coles — o');
+      log('   │ método inteiro depende disso. O sistema não vai aprovar perna');
+      log('   │ nenhuma, e está certo: sem dado, não se aposta.');
+      log('   └──────────────────────────────────────────────────────────────────');
+    }
+    log('');
   }
 
   if (!jogos.length) {

@@ -1,16 +1,16 @@
 {
   "data": "2026-07-24",
   "modo": "demo",
-  "gerado_em": "2026-07-21T15:09:07.231Z",
+  "gerado_em": "2026-07-21T15:24:09.209Z",
   "banca_no_momento": 1000,
   "config_efetivo": {
     "filtros": {
-      "odd_minima_perna": 1.2,
+      "odd_minima_perna": 1.1,
       "ev_minimo": 1.03,
       "divergencia_maxima_pp": 10,
       "amostra_minima_mando": 7,
       "odd_bilhete_min": 1.4,
-      "odd_bilhete_max": 2.2,
+      "odd_bilhete_max": 1.6,
       "max_bilhetes_dia": 3,
       "confianca_maxima_prob": 0.8,
       "confianca_maxima_ev": 0.06,
@@ -37,8 +37,8 @@
     "pernas_avaliadas": 88,
     "aprovadas": 5,
     "descartadas": 83,
-    "bilhetes": 1,
-    "sem_bilhete": false
+    "bilhetes": 0,
+    "sem_bilhete": true
   },
   "dixon_coles_por_liga": {
     "Brasileirão Série A": {
@@ -215,7 +215,7 @@
       "prob_dixon_coles": 0.9259576722687631,
       "amostra_mando": 7,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-71-0",
@@ -230,7 +230,9 @@
       "prob_dixon_coles": 0.7102122300628538,
       "amostra_mando": 7,
       "aprovada": false,
-      "motivo": "odd 1.18 abaixo do mínimo 1.20"
+      "motivo": "EV -13.6% abaixo da margem mínima de 3.0%",
+      "prob_final": 0.732248972174284,
+      "ev": 0.8640537871656551
     },
     {
       "jogo_id": "demo-71-0",
@@ -245,7 +247,9 @@
       "prob_dixon_coles": 0.8891353904891325,
       "amostra_mando": 7,
       "aprovada": false,
-      "motivo": "odd 1.16 abaixo do mínimo 1.20"
+      "motivo": "EV -2.4% abaixo da margem mínima de 3.0%",
+      "prob_final": 0.8417105523874233,
+      "ev": 0.976384240769411
     },
     {
       "jogo_id": "demo-71-0",
@@ -339,7 +343,7 @@
       "prob_dixon_coles": 0.9210507128938693,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-71-1",
@@ -369,7 +373,7 @@
       "prob_dixon_coles": 0.8970746531635475,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.05 abaixo do mínimo 1.20"
+      "motivo": "odd 1.05 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-71-1",
@@ -475,7 +479,7 @@
       "prob_dixon_coles": 0.986787436787658,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-71-2",
@@ -490,7 +494,7 @@
       "prob_dixon_coles": 0.9108203909305012,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.04 abaixo do mínimo 1.20"
+      "motivo": "odd 1.04 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-71-2",
@@ -597,7 +601,7 @@
       "prob_dixon_coles": 0.849943622787241,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.08 abaixo do mínimo 1.20"
+      "motivo": "odd 1.08 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-72-0",
@@ -629,7 +633,7 @@
       "prob_dixon_coles": 0.9387300588183118,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-72-0",
@@ -721,7 +725,7 @@
       "prob_dixon_coles": 0.7565332774665026,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.13 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 6 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-72-1",
@@ -751,7 +755,7 @@
       "prob_dixon_coles": 0.9804479374768109,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.07 abaixo do mínimo 1.20"
+      "motivo": "odd 1.07 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-72-1",
@@ -841,7 +845,7 @@
       "prob_dixon_coles": 0.9429850241397831,
       "amostra_mando": 5,
       "aprovada": false,
-      "motivo": "odd 1.04 abaixo do mínimo 1.20"
+      "motivo": "odd 1.04 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-72-2",
@@ -856,7 +860,7 @@
       "prob_dixon_coles": 0.8539073911524211,
       "amostra_mando": 5,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-72-2",
@@ -965,7 +969,7 @@
       "prob_dixon_coles": null,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-11-0",
@@ -980,7 +984,9 @@
       "prob_dixon_coles": null,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.10 abaixo do mínimo 1.20"
+      "motivo": "EV -28.7% abaixo da margem mínima de 3.0%",
+      "prob_final": 0.6483749999999999,
+      "ev": 0.7132125
     },
     {
       "jogo_id": "demo-11-0",
@@ -1101,7 +1107,7 @@
       "prob_dixon_coles": null,
       "amostra_mando": 7,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-11-1",
@@ -1137,7 +1143,7 @@
       "prob_dixon_coles": null,
       "amostra_mando": 7,
       "aprovada": false,
-      "motivo": "odd 1.05 abaixo do mínimo 1.20"
+      "motivo": "odd 1.05 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-11-1",
@@ -1233,7 +1239,7 @@
       "prob_dixon_coles": 0.9983519383145796,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-98-0",
@@ -1248,7 +1254,7 @@
       "prob_dixon_coles": 0.914587633314076,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.09 abaixo do mínimo 1.20"
+      "motivo": "odd 1.09 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-98-0",
@@ -1361,7 +1367,7 @@
       "prob_dixon_coles": 0.9608460291018311,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-98-1",
@@ -1393,7 +1399,7 @@
       "prob_dixon_coles": 0.8527914646644804,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.13 abaixo do mínimo 1.20"
+      "motivo": "modelos divergem: heurística 65% × Dixon-Coles 85% (limite 10 p.p.)"
     },
     {
       "jogo_id": "demo-98-1",
@@ -1483,7 +1489,7 @@
       "prob_dixon_coles": 0.9574423320411987,
       "amostra_mando": 4,
       "aprovada": false,
-      "motivo": "odd 1.06 abaixo do mínimo 1.20"
+      "motivo": "odd 1.06 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-98-2",
@@ -1513,7 +1519,7 @@
       "prob_dixon_coles": 0.8632469715949973,
       "amostra_mando": 4,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-98-2",
@@ -1561,72 +1567,14 @@
       "motivo": "amostra insuficiente no mando: 4 jogos (mínimo 7)"
     }
   ],
-  "bilhetes": [
-    {
-      "pernas": [
-        {
-          "jogo_id": "demo-11-0",
-          "partida": "Racing x Cruzeiro",
-          "liga": "Copa Sul-Americana",
-          "hora": "15:30",
-          "casa": "Racing",
-          "fora": "Cruzeiro",
-          "mercado": "under_45",
-          "odd": 1.41,
-          "prob_heuristica": 0.8225,
-          "prob_dixon_coles": null,
-          "amostra_mando": 8,
-          "aprovada": true,
-          "prob_final": 0.7813749999999999,
-          "ev": 1.1017387499999998,
-          "ev_pct": 10.173874999999978,
-          "confianca": "APROVADA",
-          "dixon_coles_disponivel": false,
-          "justificativa": "78% pelo modelo (só heurística (liga sem amostra p/ DC)), EV +10.2%, 8 jogos no mando.",
-          "elegivel_bilhete": true
-        },
-        {
-          "jogo_id": "demo-11-1",
-          "partida": "Independiente x Lanús",
-          "liga": "Copa Sul-Americana",
-          "hora": "17:30",
-          "casa": "Independiente",
-          "fora": "Lanús",
-          "mercado": "over_15",
-          "odd": 1.39,
-          "prob_heuristica": 0.9550000000000001,
-          "prob_dixon_coles": null,
-          "amostra_mando": 7,
-          "aprovada": true,
-          "prob_final": 0.90725,
-          "ev": 1.2610774999999999,
-          "ev_pct": 26.107749999999985,
-          "confianca": "APROVADA",
-          "dixon_coles_disponivel": false,
-          "justificativa": "91% pelo modelo (só heurística (liga sem amostra p/ DC)), EV +26.1%, 7 jogos no mando.",
-          "elegivel_bilhete": true
-        }
-      ],
-      "n_pernas": 2,
-      "odd_total": 1.9598999999999998,
-      "prob_combinada": 0.70890246875,
-      "valor_justo": 1.4106312843899234,
-      "ev": 1.3893779485031248,
-      "ev_pct": 38.93779485031248,
-      "n_confianca_maxima": 0,
-      "todas_confianca_maxima": false,
-      "correlacao_intra_jogo": false,
-      "stake_pct": 3,
-      "stake_rs": 30,
-      "ordem": 1
-    }
-  ],
-  "sem_bilhete": null,
+  "bilhetes": [],
+  "sem_bilhete": {
+    "motivo": "há 4 perna(s) aprovada(s), mas nenhuma combinação fecha odd entre 1.4 e 1.6"
+  },
   "exposicao": {
-    "total_rs": 30,
-    "pct_banca": 3,
-    "teto_pct": 8,
-    "teto_rs": 80
+    "total_rs": 0,
+    "pct_banca": 0,
+    "teto_pct": 8
   },
   "cards_handicap": [
     {

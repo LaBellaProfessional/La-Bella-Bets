@@ -4,7 +4,7 @@
   "stake_confianca_maxima_pct": 5,
   "teto_exposicao_diaria_pct": 8,
   "filtros": {
-    "odd_minima_perna": 1.2,
+    "odd_minima_perna": 1.1,
     "ev_minimo": 1.03,
     "divergencia_maxima_pp": 10,
     "amostra_minima_mando": 7,

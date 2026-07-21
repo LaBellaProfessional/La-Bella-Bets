@@ -1,11 +1,11 @@
 {
   "data": "2026-07-25",
   "modo": "demo",
-  "gerado_em": "2026-07-21T15:09:05.115Z",
+  "gerado_em": "2026-07-21T15:24:10.931Z",
   "banca_no_momento": 1000,
   "config_efetivo": {
     "filtros": {
-      "odd_minima_perna": 1.2,
+      "odd_minima_perna": 1.1,
       "ev_minimo": 1.03,
       "divergencia_maxima_pp": 10,
       "amostra_minima_mando": 7,
@@ -209,7 +209,7 @@
       "prob_dixon_coles": 0.9164468292238116,
       "amostra_mando": 9,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-71-0",
@@ -224,7 +224,7 @@
       "prob_dixon_coles": 0.6368068373608458,
       "amostra_mando": 9,
       "aprovada": false,
-      "motivo": "odd 1.18 abaixo do mínimo 1.20"
+      "motivo": "modelos divergem: heurística 48% × Dixon-Coles 64% (limite 10 p.p.)"
     },
     {
       "jogo_id": "demo-71-0",
@@ -239,7 +239,7 @@
       "prob_dixon_coles": 0.9220199007799912,
       "amostra_mando": 9,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-71-0",
@@ -339,7 +339,7 @@
       "prob_dixon_coles": 0.9757271855159821,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-71-1",
@@ -354,7 +354,7 @@
       "prob_dixon_coles": 0.819499922923274,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.16 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 6 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-71-1",
@@ -369,7 +369,7 @@
       "prob_dixon_coles": 0.77770849471713,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.19 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 6 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-71-1",
@@ -461,7 +461,7 @@
       "prob_dixon_coles": 0.9375732469519544,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.10 abaixo do mínimo 1.20"
+      "motivo": "modelos divergem: heurística 75% × Dixon-Coles 94% (limite 10 p.p.)"
     },
     {
       "jogo_id": "demo-71-2",
@@ -491,7 +491,7 @@
       "prob_dixon_coles": 0.89412714616864,
       "amostra_mando": 8,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-71-2",
@@ -587,7 +587,7 @@
       "prob_dixon_coles": 0.8626383938544508,
       "amostra_mando": 5,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-72-0",
@@ -602,7 +602,7 @@
       "prob_dixon_coles": 0.5464744135506958,
       "amostra_mando": 5,
       "aprovada": false,
-      "motivo": "odd 1.19 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 5 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-72-0",
@@ -617,7 +617,7 @@
       "prob_dixon_coles": 0.957531224869443,
       "amostra_mando": 5,
       "aprovada": false,
-      "motivo": "odd 1.19 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 5 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-72-0",
@@ -707,7 +707,7 @@
       "prob_dixon_coles": 0.9414248003197963,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.11 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 6 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-72-1",
@@ -737,7 +737,7 @@
       "prob_dixon_coles": 0.8763035776171718,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.05 abaixo do mínimo 1.20"
+      "motivo": "odd 1.05 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-72-1",
@@ -827,7 +827,7 @@
       "prob_dixon_coles": 0.9522964641086235,
       "amostra_mando": 5,
       "aprovada": false,
-      "motivo": "odd 1.12 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 5 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-72-2",
@@ -857,7 +857,7 @@
       "prob_dixon_coles": 0.8512970657582967,
       "amostra_mando": 5,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-72-2",
@@ -951,7 +951,7 @@
       "prob_dixon_coles": null,
       "amostra_mando": 7,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-11-0",
@@ -1081,7 +1081,7 @@
       "prob_dixon_coles": null,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.06 abaixo do mínimo 1.20"
+      "motivo": "odd 1.06 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-11-1",
@@ -1111,7 +1111,7 @@
       "prob_dixon_coles": null,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.15 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 6 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-11-1",
@@ -1201,7 +1201,7 @@
       "prob_dixon_coles": 0.9675255539365513,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-98-0",
@@ -1216,7 +1216,7 @@
       "prob_dixon_coles": 0.8122282267205145,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.15 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 6 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-98-0",
@@ -1321,7 +1321,7 @@
       "prob_dixon_coles": 0.9629280898136987,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.14 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 6 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-98-1",
@@ -1351,7 +1351,7 @@
       "prob_dixon_coles": 0.8108148555343219,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.13 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 6 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-98-1",
@@ -1441,7 +1441,7 @@
       "prob_dixon_coles": 0.9220859444631608,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.02 abaixo do mínimo 1.20"
+      "motivo": "odd 1.02 abaixo do mínimo 1.10"
     },
     {
       "jogo_id": "demo-98-2",
@@ -1471,7 +1471,7 @@
       "prob_dixon_coles": 0.9055441739880248,
       "amostra_mando": 6,
       "aprovada": false,
-      "motivo": "odd 1.10 abaixo do mínimo 1.20"
+      "motivo": "amostra insuficiente no mando: 6 jogos (mínimo 7)"
     },
     {
       "jogo_id": "demo-98-2",
