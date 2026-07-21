@@ -74,10 +74,17 @@ const main = async () => {
   // ── análises
   const dirAnalises = path.join(DIR, 'analises');
   const arquivos = fs.existsSync(dirAnalises) ? fs.readdirSync(dirAnalises).filter((f) => f.endsWith('.json')) : [];
-  await upsert('analises', arquivos.map((f) => {
-    const a = JSON.parse(fs.readFileSync(path.join(dirAnalises, f), 'utf8'));
-    return { data: a.data, modo: a.modo, gerado_em: a.gerado_em, resumo: a.resumo, payload: a };
-  }), 'data');
+  // Só análise REAL vai pra nuvem. Demo é ferramenta de teste local: se subisse, voltaria
+  // a poluir o histórico a cada migração — e histórico com dado simulado no meio nao serve
+  // pra avaliar metodo nenhum.
+  const analises = arquivos
+    .map((f) => JSON.parse(fs.readFileSync(path.join(dirAnalises, f), 'utf8')))
+    .filter((a) => a.modo === 'real');
+  const pulados = arquivos.length - analises.length;
+  if (pulados) console.log(`   (${pulados} análise(s) demo ignorada(s) — só real sobe)`);
+  await upsert('analises', analises.map((a) => (
+    { data: a.data, modo: a.modo, gerado_em: a.gerado_em, resumo: a.resumo, payload: a }
+  )), 'data');
 
   // ── bilhetes já registrados
   const bilhetes = ler('bilhetes.json', []);
