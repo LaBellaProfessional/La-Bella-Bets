@@ -4,12 +4,35 @@ import { supabase, invocar } from './supabase';
 export const ROTULO: Record<string, string> = {
   dupla_chance_casa: 'DC casa (1X)',
   dupla_chance_fora: 'DC fora (X2)',
-  over_05: 'Over 0.5',
-  over_15: 'Over 1.5',
-  under_45: 'Under 4.5',
   ah_casa_m05: 'AH casa -0.5',
   ah_casa_m10: 'AH casa -1.0',
   ah_fora_p05: 'AH fora +0.5',
+};
+
+/**
+ * Mercados de LINHA são gerados, não tabelados: a casa publica a linha que quiser
+ * (over 1.5, 2.5, escanteios 9.5…) e o dash tem que saber escrever qualquer uma.
+ * Chave: `<lado>_<ponto sem o ponto>`, com prefixo `esc_` pra escanteios.
+ */
+export function rotuloMercado(mercado: string): string {
+  if (ROTULO[mercado]) return ROTULO[mercado];
+  const m = /^(esc_)?(over|under)_(\d+)$/.exec(mercado ?? '');
+  if (!m) return mercado;
+  const d = m[3];
+  const linha = Number(d.slice(0, -1) || '0') + Number(d.slice(-1)) / 10;
+  return `${m[2] === 'over' ? 'Over' : 'Under'} ${linha.toFixed(1)}${m[1] ? ' esc.' : ''}`;
+}
+
+export type Familia = 'resultado' | 'gols' | 'escanteios';
+
+export function familiaDoMercado(mercado: string): Familia {
+  if (String(mercado).startsWith('esc_')) return 'escanteios';
+  if (/^(over|under)_\d+$/.test(String(mercado))) return 'gols';
+  return 'resultado';
+}
+
+export const NOME_FAMILIA: Record<Familia, string> = {
+  resultado: 'Resultado', gols: 'Gols', escanteios: 'Escanteios',
 };
 
 export interface Perna {
@@ -24,6 +47,10 @@ export interface Perna {
   aprovada: boolean; motivo?: string; confianca?: string;
   amostra_curta?: boolean; badge_amostra?: string | null; casa_odd?: string | null;
   justificativa?: string; elegivel_bilhete?: boolean; dixon_coles_disponivel?: boolean;
+  // Escanteios: a API não publica preço, então a perna nasce sem odd e com a odd JUSTA
+  // calculada pelo modelo. É o número contra o qual a odd digitada é comparada.
+  sem_odd_referencia?: boolean; odd_justa?: number; lambda_escanteios?: number | null;
+  stake_pct?: number; stake_rs?: number;
 }
 
 export interface Bilhete {

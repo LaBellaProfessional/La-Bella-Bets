@@ -1,4 +1,4 @@
-import { brl, ROTULO, type Config, type Registro } from '../dados';
+import { brl, rotuloMercado, type Config, type Registro } from '../dados';
 
 type RegistroUI = Registro & { stake_rs: number };
 
@@ -71,7 +71,7 @@ export function Historico({
                   )}
                 </div>
                 <div className="mt-1 text-xs text-t3">
-                  {r.pernas.map((p) => `${p.partida} (${ROTULO[p.mercado] ?? p.mercado} @ ${p.odd})`).join('  ·  ')}
+                  {r.pernas.map((p) => `${p.partida} (${rotuloMercado(p.mercado)} @ ${p.odd})`).join('  ·  ')}
                 </div>
               </div>
             ))}

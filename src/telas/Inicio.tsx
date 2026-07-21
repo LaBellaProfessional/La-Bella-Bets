@@ -1,5 +1,8 @@
 import { useState } from 'react';
-import { brl, ROTULO, type Analise, type Config, type Perna } from '../dados';
+import {
+  brl, rotuloMercado, familiaDoMercado, NOME_FAMILIA,
+  type Analise, type Config, type Familia, type Perna,
+} from '../dados';
 
 /**
  * ABA INÍCIO — a tela de decisão.
@@ -98,6 +101,25 @@ function DiaBloco({
       ? (config?.stake_confianca_maxima_pct ?? 5)
       : (config?.stake_padrao_pct ?? 3);
 
+  // Cada entrada do dia carrega sua família. Um bilhete pode misturar mercados (resultado +
+  // gols); nesse caso vale a família da primeira perna — o bilhete é uma decisão só.
+  type Item =
+    | { tipo: 'bilhete'; chave: string; fam: Familia; bilhete: (typeof bilhetes)[number] }
+    | { tipo: 'perna'; chave: string; fam: Familia; perna: Perna };
+  const itens: Item[] = [
+    ...bilhetes.map((b) => ({
+      tipo: 'bilhete' as const, chave: `b${b.ordem}`, bilhete: b,
+      fam: familiaDoMercado(b.pernas[0]?.mercado ?? ''),
+    })),
+    ...simples.map((p, i) => ({
+      tipo: 'perna' as const, chave: `s${i}`, perna: p, fam: familiaDoMercado(p.mercado),
+    })),
+  ];
+  const ORDEM: Familia[] = ['resultado', 'gols', 'escanteios'];
+  const grupos = ORDEM
+    .map((f) => [f, itens.filter((i) => i.fam === f)] as const)
+    .filter(([, l]) => l.length > 0);
+
   return (
     <section>
       <div className="mb-3 flex flex-wrap items-baseline gap-2">
@@ -120,41 +142,55 @@ function DiaBloco({
           </div>
         </div>
       ) : (
-        <div className="space-y-3">
-          {bilhetes.map((b) => (
-            <CardEntrada
-              key={`b${b.ordem}`}
-              tipo={b.n_pernas > 1 ? 'BILHETE' : 'ENTRADA SIMPLES'}
-              data={analise.data}
-              pernas={b.pernas}
-              oddReferencia={b.odd_total}
-              prob={b.prob_combinada}
-              stakePct={b.stake_pct}
-              stakeRS={b.stake_rs}
-              confiancaMaxima={b.todas_confianca_maxima}
-              correlacao={b.correlacao_intra_jogo}
-              evMinimo={config?.filtros?.ev_minimo ?? 1.03}
-              registrado={jaRegistrados.some((r) => r.data === analise.data && r.odd_referencia === b.odd_total)}
-              onRegistrar={onRegistrar}
-            />
-          ))}
-          {simples.map((p, i) => (
-            <CardEntrada
-              key={`s${i}`}
-              tipo="ENTRADA SIMPLES"
-              data={analise.data}
-              pernas={[p]}
-              oddReferencia={p.odd ?? 0}
-              prob={p.prob_final ?? 0}
-              stakePct={stakePctDe(p)}
-              stakeRS={+(((config?.banca ?? 1000) * stakePctDe(p)) / 100).toFixed(2)}
-              confiancaMaxima={p.confianca === 'CONFIANCA_MAXIMA' && !p.amostra_curta}
-              correlacao={false}
-              evMinimo={config?.filtros?.ev_minimo ?? 1.03}
-              foraDaFaixa
-              registrado={jaRegistrados.some((r) => r.data === analise.data && r.odd_referencia === p.odd)}
-              onRegistrar={onRegistrar}
-            />
+        // Agrupamento por MERCADO: com gols e escanteios ligados, um dia pode ter três tipos
+        // de entrada muito diferentes entre si. Sem separar, "over 2.5" e "over 8.5 escanteios"
+        // apareciam empilhados como se fossem a mesma decisão. O cabeçalho só aparece quando
+        // há mais de uma família — num dia só de resultado, seria ruído.
+        <div className="space-y-4">
+          {grupos.map(([fam, itens]) => (
+            <div key={fam} className="space-y-3">
+              {grupos.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-t3">{NOME_FAMILIA[fam]}</span>
+                  <span className="h-px flex-1 bg-borda" />
+                </div>
+              )}
+              {itens.map((it) => it.tipo === 'bilhete' ? (
+                <CardEntrada
+                  key={it.chave}
+                  tipo={it.bilhete.n_pernas > 1 ? 'BILHETE' : 'ENTRADA SIMPLES'}
+                  data={analise.data}
+                  pernas={it.bilhete.pernas}
+                  oddReferencia={it.bilhete.odd_total}
+                  prob={it.bilhete.prob_combinada}
+                  stakePct={it.bilhete.stake_pct}
+                  stakeRS={it.bilhete.stake_rs}
+                  confiancaMaxima={it.bilhete.todas_confianca_maxima}
+                  correlacao={it.bilhete.correlacao_intra_jogo}
+                  evMinimo={config?.filtros?.ev_minimo ?? 1.03}
+                  registrado={jaRegistrados.some((r) => r.data === analise.data && r.odd_referencia === it.bilhete.odd_total)}
+                  onRegistrar={onRegistrar}
+                />
+              ) : (
+                <CardEntrada
+                  key={it.chave}
+                  tipo={it.perna.sem_odd_referencia ? 'ESCANTEIOS — SEM ODD DE REFERÊNCIA' : 'ENTRADA SIMPLES'}
+                  data={analise.data}
+                  pernas={[it.perna]}
+                  oddReferencia={it.perna.sem_odd_referencia ? (it.perna.odd_justa ?? 0) : (it.perna.odd ?? 0)}
+                  semOdd={it.perna.sem_odd_referencia}
+                  prob={it.perna.prob_final ?? 0}
+                  stakePct={stakePctDe(it.perna)}
+                  stakeRS={it.perna.stake_rs ?? +(((config?.banca ?? 1000) * stakePctDe(it.perna)) / 100).toFixed(2)}
+                  confiancaMaxima={it.perna.confianca === 'CONFIANCA_MAXIMA' && !it.perna.amostra_curta}
+                  correlacao={false}
+                  evMinimo={config?.filtros?.ev_minimo ?? 1.03}
+                  foraDaFaixa={!it.perna.sem_odd_referencia}
+                  registrado={jaRegistrados.some((r) => r.data === analise.data && r.odd_referencia === it.perna.odd)}
+                  onRegistrar={onRegistrar}
+                />
+              ))}
+            </div>
           ))}
         </div>
       )}
@@ -169,14 +205,17 @@ export interface EntradaRegistro {
 
 function CardEntrada({
   tipo, data, pernas, oddReferencia, prob, stakePct, stakeRS,
-  confiancaMaxima, correlacao, evMinimo, foraDaFaixa, registrado, onRegistrar,
+  confiancaMaxima, correlacao, evMinimo, foraDaFaixa, semOdd, registrado, onRegistrar,
 }: {
   tipo: string; data: string; pernas: Perna[]; oddReferencia: number; prob: number;
   stakePct: number; stakeRS: number; confiancaMaxima: boolean; correlacao: boolean;
-  evMinimo: number; foraDaFaixa?: boolean; registrado: boolean;
+  evMinimo: number; foraDaFaixa?: boolean; semOdd?: boolean; registrado: boolean;
   onRegistrar: (e: EntradaRegistro) => void;
 }) {
-  const [oddCasa, setOddCasa] = useState<string>(oddReferencia.toFixed(2));
+  // Escanteios entram com o campo VAZIO de propósito: preencher com a odd justa convidaria a
+  // registrar o número do modelo como se fosse preço de casa — exatamente o erro que o CLV
+  // existe pra medir. Sem odd digitada, o botão não libera.
+  const [oddCasa, setOddCasa] = useState<string>(semOdd ? '' : oddReferencia.toFixed(2));
   const [stake, setStake] = useState<number>(stakeRS);
 
   const odd = Number(oddCasa) || 0;
@@ -211,7 +250,9 @@ function CardEntrada({
             </span>
           )}
         </div>
-        <span className="font-mono text-lg text-t1">@ {oddReferencia.toFixed(2)}</span>
+        <span className="font-mono text-lg text-t1">
+          {semOdd ? `justa @ ${oddReferencia.toFixed(2)}` : `@ ${oddReferencia.toFixed(2)}`}
+        </span>
       </div>
 
       <div className="mt-3 space-y-2">
@@ -219,13 +260,18 @@ function CardEntrada({
           <div key={i} className="border-l-2 border-borda pl-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <span className="text-sm font-medium text-t1">{p.partida}</span>
-              <span className="font-mono text-xs text-t2">@ {p.odd}</span>
+              <span className="font-mono text-xs text-t2">{p.odd != null ? `@ ${p.odd}` : '—'}</span>
             </div>
             <div className="text-xs text-azul">
-              {ROTULO[p.mercado] ?? p.mercado}
+              {rotuloMercado(p.mercado)}
               {p.hora && <span className="text-t3"> · {p.hora}</span>}
               {p.casa_odd && <span className="text-t3"> · odd da {p.casa_odd}</span>}
             </div>
+            {p.lambda_escanteios != null && (
+              <div className="text-[11px] text-t3">
+                média projetada de {p.lambda_escanteios.toFixed(1)} escanteios no jogo
+              </div>
+            )}
             {p.badge_amostra && <div className="text-[11px] text-ambar">{p.badge_amostra}</div>}
           </div>
         ))}
@@ -239,11 +285,15 @@ function CardEntrada({
             onChange={(e) => setOddCasa(e.target.value)}
             className="w-24 rounded border border-borda bg-card px-2 py-1 font-mono text-sm text-t1 outline-none focus:border-azul"
           />
-          <span className="text-t3">(referência @{oddReferencia.toFixed(2)})</span>
+          <span className="text-t3">
+            {semOdd ? `(obrigatório — o modelo não tem preço de mercado aqui)` : `(referência @${oddReferencia.toFixed(2)})`}
+          </span>
         </div>
         <div className={`mt-2 text-sm font-medium ${vale ? 'text-verde' : 'text-vermelho'}`}>
           {odd <= 1
-            ? 'Digite a odd que a sua casa está pagando'
+            ? semOdd
+              ? `Digite a odd da sua casa pra saber se vale — o justo aqui é @${justo.toFixed(2)}`
+              : 'Digite a odd que a sua casa está pagando'
             : vale
               ? `Ainda vale — @${odd.toFixed(2)} paga acima do justo @${justo.toFixed(2)} (+${ganho.toFixed(1)}% de vantagem)`
               : `Nessa odd a vantagem sumiu — o justo é @${justo.toFixed(2)}, melhor pular`}
@@ -264,12 +314,14 @@ function CardEntrada({
         <button
           disabled={registrado || !vale}
           onClick={() => onRegistrar({
-            data, pernas, odd_real: odd, odd_referencia: oddReferencia,
+            // Sem odd de mercado, não há referência de CLV: gravar a odd justa como se fosse
+            // a odd vista seria inventar um preço que ninguém publicou.
+            data, pernas, odd_real: odd, odd_referencia: semOdd ? 0 : oddReferencia,
             prob, stake, casa_odd: pernas[0]?.casa_odd ?? null,
           })}
           className="ml-auto rounded bg-rosa px-4 py-1.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-borda disabled:text-t3"
         >
-          {registrado ? 'Registrado' : vale ? 'Registrar' : 'Sem valor'}
+          {registrado ? 'Registrado' : odd <= 1 ? 'Digite a odd' : vale ? 'Registrar' : 'Sem valor'}
         </button>
       </div>
     </div>

@@ -11,6 +11,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { chaveLinha } from './tipos.js';
 
 const API_FOOTBALL = 'https://v3.football.api-sports.io';
 
@@ -241,6 +242,35 @@ function melhorOdd(bookmakers, mercadoKey, nomeResultado, ponto, casaPreferida) 
 }
 
 /**
+ * Todas as linhas de over/under que as casas cotaram neste evento.
+ *
+ * Só MEIA-LINHA (x.5). Linha cheia (2.0) devolve a aposta quando o jogo termina com
+ * exatamente 2 gols, e linha de quarto (2.25) devolve metade — o EV desses mercados só fecha
+ * com o termo de push, que os filtros não modelam. Avaliar 2.25 como se fosse 2.5 estimaria
+ * valor onde não há. Ficam de fora, declaradamente.
+ *
+ * Medido em 21/07 na Série B: das 4 linhas publicadas (1.5, 2.0, 2.25, 2.5), duas são
+ * meia-linha e concentram a maior parte das cotações.
+ */
+function linhasTotais(bookmakers) {
+  const vistas = new Map();
+  for (const bk of bookmakers ?? []) {
+    for (const mk of bk.markets ?? []) {
+      if (mk.key !== 'totals') continue;
+      for (const o of mk.outcomes ?? []) {
+        const ponto = Number(o.point);
+        if (!Number.isFinite(ponto)) continue;
+        if (Math.abs(ponto * 10 % 10) !== 5) continue;   // só x.5
+        const lado = o.name === 'Over' ? 'Over' : o.name === 'Under' ? 'Under' : null;
+        if (!lado) continue;
+        vistas.set(`${lado}${ponto}`, { lado, ponto });
+      }
+    }
+  }
+  return [...vistas.values()];
+}
+
+/**
  * Odds por jogo, já traduzidas pros mercados do método.
  * Dupla chance não é oferecida direto: deriva do 1X2 removendo o overround
  * (DC = 1 / (p_norm_a + p_norm_b)). É a conversão padrão.
@@ -316,12 +346,15 @@ export async function buscarOddsDosJogos(jogos, casaPreferida = null) {
       const val = (r, nome) => { if (r) casasUsadas[nome] = r.casa; return r ? r.odd : null; };
       if (oCasa) casasUsadas.dupla_chance_casa = oCasa.casa;
       if (oFora) casasUsadas.dupla_chance_fora = oFora.casa;
+      const linhas = {};
+      for (const { lado, ponto } of linhasTotais(ev.bookmakers)) {
+        const chave = chaveLinha('', lado.toLowerCase(), ponto);
+        linhas[chave] = val(melhorOdd(ev.bookmakers, 'totals', lado, ponto, casaPreferida), chave);
+      }
       odds[j.id] = {
         dupla_chance_casa: dc(oCasa, oEmp),
         dupla_chance_fora: dc(oFora, oEmp),
-        over_05: val(melhorOdd(ev.bookmakers, 'totals', 'Over', 0.5, casaPreferida), 'over_05'),
-        over_15: val(melhorOdd(ev.bookmakers, 'totals', 'Over', 1.5, casaPreferida), 'over_15'),
-        under_45: val(melhorOdd(ev.bookmakers, 'totals', 'Under', 4.5, casaPreferida), 'under_45'),
+        ...linhas,
         // Handicap asiático não vem no tier gratuito: fica null e a perna é descartada
         // com "sem odd" — honesto, em vez de inventar preço.
         ah_casa_m05: null, ah_casa_m10: null, ah_fora_p05: null,
@@ -387,7 +420,7 @@ function historicoDemo(nome, atq, def, adversarios, rand, nJogos = 18) {
 function probsDemo(lamA, lamB) {
   const fat = (n) => { let r = 1; for (let i = 2; i <= n; i++) r *= i; return r; };
   const po = (k, l) => (Math.exp(-l) * Math.pow(l, k)) / fat(k);
-  let casa = 0, emp = 0, fora = 0, casaPor2 = 0, o05 = 0, o15 = 0, u45 = 0;
+  let casa = 0, emp = 0, fora = 0, casaPor2 = 0, o05 = 0, o15 = 0, o25 = 0, u45 = 0;
   for (let x = 0; x <= 8; x++) {
     for (let y = 0; y <= 8; y++) {
       const p = po(x, lamA) * po(y, lamB), t = x + y, d = x - y;
@@ -395,12 +428,13 @@ function probsDemo(lamA, lamB) {
       if (d >= 2) casaPor2 += p;
       if (t >= 1) o05 += p;
       if (t >= 2) o15 += p;
+      if (t >= 3) o25 += p;
       if (t <= 4) u45 += p;
     }
   }
   return {
     casa_vence: casa, empate: emp, fora_vence: fora, casa_por_2: casaPor2,
-    dc_casa: casa + emp, dc_fora: fora + emp, over_05: o05, over_15: o15, under_45: u45,
+    dc_casa: casa + emp, dc_fora: fora + emp, over_05: o05, over_15: o15, over_25: o25, under_25: 1 - o25, under_45: u45,
   };
 }
 
@@ -459,6 +493,8 @@ export function gerarDemo(data, ligasAtivas) {
         dupla_chance_fora: comRuido(pv.dc_fora),
         over_05: comRuido(pv.over_05),
         over_15: comRuido(pv.over_15),
+        over_25: comRuido(pv.over_25),
+        under_25: comRuido(pv.under_25),
         under_45: comRuido(pv.under_45),
         ah_casa_m05: comRuido(pv.casa_vence),
         ah_casa_m10: comRuido(pv.casa_por_2),

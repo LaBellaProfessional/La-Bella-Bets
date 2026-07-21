@@ -15,7 +15,8 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 // @ts-nocheck — os módulos do método são JS puro, copiados sem alteração de propósito.
 import { probHeuristica } from '../_shared/heuristica.js';
-import { matrizPlacares, mercadosDaMatriz } from '../_shared/dixonColes.js';
+import { matrizPlacares, mercadosDaMatriz, probTotalDaMatriz } from '../_shared/dixonColes.js';
+import { pernasEscanteios } from '../_shared/escanteios.js';
 import { avaliarPerna } from '../_shared/filtros.js';
 import { montarBilhetes, cardsHandicap } from '../_shared/montador.js';
 import { contagensDoJogo } from '../_shared/narrativa.js';
@@ -84,7 +85,12 @@ Deno.serve(async (req) => {
       ligas: cfgRow.ligas,
     };
     const ligasAtivas = (cfg.ligas as any[]).filter((l) => l.ativa);
-    const MERCADOS = [...(cfg.mercados_em_bilhete as string[]), 'ah_casa_m05', 'ah_casa_m10', 'ah_fora_p05'];
+    // Mercados de chave fixa. Os de GOLS não entram aqui: a linha cotada varia por jogo
+    // (a casa publica 2.5 num, 1.5 e 2.5 noutro), então são descobertos das odds recebidas.
+    const MERCADOS_FIXOS = [
+      ...(cfg.mercados_em_bilhete as string[]).filter((m: string) => !/^(over|under)_/.test(m)),
+      'ah_casa_m05', 'ah_casa_m10', 'ah_fora_p05',
+    ];
     const evAntecipado = Number((cfg.filtros as any).ev_minimo_antecipado ?? 1.06);
 
     const base = (corpo.data as string) ?? hojeSP();
@@ -160,6 +166,22 @@ Deno.serve(async (req) => {
       }
     }
 
+    // ── 3b. Escanteios: histórico por time, direto do cache (não gasta API na análise).
+    // Indexado por nome de time igual ao histórico de gols, então o módulo de escanteios
+    // recebe a mesma forma de dado que a heurística já consome.
+    const escanteios: Record<string, any[]> = {};
+    const escPorPar: Record<string, any[]> = {};
+    {
+      const { data: rows } = await sb.from('historico_escanteios')
+        .select('data,casa,fora,esc_casa,esc_fora').order('data', { ascending: false });
+      for (const r of rows ?? []) {
+        (escanteios[r.casa] ??= []).push(r);
+        (escanteios[r.fora] ??= []).push(r);
+        const par = [r.casa, r.fora].sort().join('|');
+        (escPorPar[par] ??= []).push(r);
+      }
+    }
+
     // ── 4. Dixon-Coles: só parâmetros salvos (ajustar aqui derruba a function)
     const { data: paramsRows } = await sb.from('modelo_params').select('*');
     const paramsPorLiga = Object.fromEntries((paramsRows ?? []).map((p) => [p.liga, p]));
@@ -191,6 +213,12 @@ Deno.serve(async (req) => {
         matrizes[jogo.id] = matriz;
         const probsDC = mercadosDaMatriz(matriz);
 
+        // Linhas de gols efetivamente cotadas neste jogo (over_25, under_25, over_15…).
+        // É o conserto do mercado de gols: antes o sistema perguntava por três linhas fixas,
+        // duas das quais a API nunca publica — over 0.5 e under 4.5 morriam em "sem odd".
+        const linhasGols = Object.keys(odds[jogo.id] ?? {}).filter((k) => /^(over|under)_\d+$/.test(k));
+        const MERCADOS = [...MERCADOS_FIXOS, ...linhasGols];
+
         for (const mercado of MERCADOS) {
           const h = probHeuristica({
             mercado, casa: jogo.casa, fora: jogo.fora,
@@ -200,7 +228,9 @@ Deno.serve(async (req) => {
           const p = avaliarPerna({
             jogo, mercado,
             odd: odds[jogo.id]?.[mercado] ?? null,
-            probH: h.prob, probDC: probsDC?.[mercado] ?? null,
+            // Linha de gols que não está na lista fixa do Dixon-Coles é calculada na hora
+            // pela matriz de placares — o segundo modelo continua existindo pra ela.
+            probH: h.prob, probDC: probsDC?.[mercado] ?? probTotalDaMatriz(matriz, mercado),
             probPush: mercado === 'ah_casa_m10' ? (probsDC?.ah_casa_m10_push ?? 0) : 0,
             amostraMando: h.amostra_mando,
             filtros: { ...(cfg.filtros as any), mercados_em_bilhete: cfg.mercados_em_bilhete },
@@ -225,6 +255,24 @@ Deno.serve(async (req) => {
               idade_horas: Math.round((Date.now() - new Date(t.primeira_vista_em).getTime()) / 36e5),
               movimento: p.odd != null ? +(p.odd - Number(t.primeira_odd)).toFixed(2) : null,
             };
+          }
+          pernas.push(p);
+        }
+
+        // ── ESCANTEIOS: caminho próprio, sem odd de mercado. Não passa por avaliarPerna
+        // porque os dois filtros centrais de lá (EV e divergência entre modelos) precisam de
+        // um preço publicado. Aqui o preço é o que o Maikon digitar na tela.
+        for (const p of pernasEscanteios({
+          jogo, escanteios, h2hEsc: escPorPar[[jogo.casa, jogo.fora].sort().join('|')] ?? [],
+          pesos: cfg.pesos_heuristica, filtros: cfg.filtros as any,
+          banca: cfg.banca, stakePct: cfg.stake_padrao_pct,
+        })) {
+          p.horizonte_dias = horizonte;
+          // A regra de entrada antecipada vale igual: escalação indefinida muda escanteio
+          // tanto quanto muda gol. Sem EV pra comparar, o critério é a própria convicção.
+          if (p.aprovada && horizonte > 0) {
+            p.radar = true;
+            p.motivo_radar = `escanteios a ${horizonte} dia(s) do jogo — aguardar a véspera (escalação muda ritmo e volume de ataque)`;
           }
           pernas.push(p);
         }

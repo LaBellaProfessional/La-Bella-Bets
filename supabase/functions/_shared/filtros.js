@@ -4,7 +4,7 @@
  * porque a tela Análises tem que explicar por que o jogo caiu — descarte explicado é
  * metade do método.
  */
-import { MOTIVO, CONFIANCA, MERCADOS_AH } from './tipos.js';
+import { MOTIVO, CONFIANCA, MERCADOS_AH, ehGols, ehEscanteio } from './tipos.js';
 
 export function avaliarPerna({ jogo, mercado, odd, probH, probDC, probPush, amostraMando, filtros }) {
   const base = {
@@ -86,7 +86,12 @@ export function avaliarPerna({ jogo, mercado, odd, probH, probDC, probPush, amos
     amostra_curta: amostraCurta,
     badge_amostra: amostraCurta ? `amostra curta no mando (${amostraMando} jogos)` : null,
     justificativa: montarJustificativa({ mercado, probFinal, ev, temDC, amostraMando, jogo }),
-    elegivel_bilhete: !MERCADOS_AH.includes(mercado) && filtros.mercados_em_bilhete.includes(mercado),
+    // Elegibilidade por FAMÍLIA, não por lista fixa: o config lista os mercados de resultado,
+    // e qualquer linha de gols cotada entra por ser gols. Antes, uma perna over 2.5 nasceria
+    // aprovada e inelegível — o mercado novo só apareceria como card, nunca em bilhete.
+    elegivel_bilhete:
+      !MERCADOS_AH.includes(mercado) && !ehEscanteio(mercado) &&
+      (ehGols(mercado) || filtros.mercados_em_bilhete.includes(mercado)),
   };
 }
 

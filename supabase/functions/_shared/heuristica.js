@@ -6,8 +6,11 @@
  * nunca completa buraco com chute.
  */
 
+import { partesLinha } from './tipos.js';
+
 /** Taxa de acerto de um mercado num conjunto de jogos, do ponto de vista de `time`. */
 function taxaNoBloco(jogos, mercado, time) {
+  const linha = partesLinha(mercado);
   if (!jogos.length) return null;
   let n = 0;
   let denominador = 0;
@@ -19,20 +22,17 @@ function taxaNoBloco(jogos, mercado, time) {
     const saldo = golsPro - golsContra;
     let bateu = false;
     denominador++;
+    // Mercado de LINHA (over/under de gols) resolve genericamente: a linha é sempre meia
+    // (2.5, 1.5…), então não existe devolução — ou passou, ou não passou.
+    if (linha) {
+      if (linha.lado === 'over' ? total > linha.linha : total < linha.linha) n++;
+      continue;
+    }
     switch (mercado) {
       // Dupla chance = não perder. O lado (casa/fora) é o do próprio time no jogo analisado.
       case 'dupla_chance_casa':
       case 'dupla_chance_fora':
         bateu = saldo >= 0;
-        break;
-      case 'over_05':
-        bateu = total >= 1;
-        break;
-      case 'over_15':
-        bateu = total >= 2;
-        break;
-      case 'under_45':
-        bateu = total <= 4;
         break;
       // Handicaps: taxa histórica REAL do time, não cópia do Dixon-Coles. Sem isso o filtro
       // de concordância viraria vazio pro AH (dois "modelos" com o mesmo número sempre

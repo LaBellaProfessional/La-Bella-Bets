@@ -11,6 +11,8 @@
  * só com heurística e confiança rebaixada. Nunca fingir precisão.
  */
 
+import { partesLinha } from './tipos.js';
+
 const fatorial = (n) => { let r = 1; for (let i = 2; i <= n; i++) r *= i; return r; };
 const poisson = (k, lambda) => (Math.exp(-lambda) * Math.pow(lambda, k)) / fatorial(k);
 
@@ -185,9 +187,30 @@ export function mercadosDaMatriz(matriz) {
 }
 
 /**
+ * Probabilidade de uma linha QUALQUER de over/under a partir da matriz.
+ *
+ * A The Odds API publica a linha que quiser (1.5, 2.0, 2.25, 2.5…) e o sistema só sabia
+ * avaliar três linhas codificadas. Aqui a matriz de placares responde por qualquer
+ * meia-linha — é o que transforma over/under de três constantes num mercado de verdade.
+ */
+export function probTotalDaMatriz(matriz, mercado) {
+  const p = partesLinha(mercado);
+  if (!matriz || !p || p.familia !== 'gols') return null;
+  const m = matriz.matriz;
+  const N = m.length - 1;
+  let acc = 0;
+  for (let x = 0; x <= N; x++)
+    for (let y = 0; y <= N; y++) {
+      const t = x + y;
+      if (p.lado === 'over' ? t > p.linha : t < p.linha) acc += m[x][y];
+    }
+  return acc;
+}
+
+/**
  * Probabilidade CONJUNTA de duas pernas do mesmo jogo, direto da matriz.
  * É o que impede o erro clássico de multiplicar probabilidades correlacionadas
- * (ex.: "dupla chance casa" e "over 0.5" não são independentes).
+ * (ex.: "dupla chance casa" e "over 1.5" não são independentes).
  */
 export function probConjuntaMesmoJogo(matriz, mercadoA, mercadoB) {
   if (!matriz) return null;
@@ -195,12 +218,11 @@ export function probConjuntaMesmoJogo(matriz, mercadoA, mercadoB) {
   const N = m.length - 1;
   const bate = (mercado, x, y) => {
     const t = x + y, d = x - y;
+    const linha = partesLinha(mercado);
+    if (linha && linha.familia === 'gols') return linha.lado === 'over' ? t > linha.linha : t < linha.linha;
     switch (mercado) {
       case 'dupla_chance_casa': return d >= 0;
       case 'dupla_chance_fora': return d <= 0;
-      case 'over_05': return t >= 1;
-      case 'over_15': return t >= 2;
-      case 'under_45': return t <= 4;
       default: return false;
     }
   };

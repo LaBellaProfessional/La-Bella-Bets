@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { pct, ROTULO, type Analise, type Perna } from '../dados';
+import { pct, rotuloMercado, type Analise, type Perna } from '../dados';
 import { Vazio } from './Inicio';
 
 /**
@@ -71,7 +71,7 @@ function porqueDoJogo(c: Contagens | undefined, casa: string): string | null {
 
 /* ── chip de mercado com semáforo textual ────────────────────────────────── */
 function chipDoMercado(p: Perna): { icone: string; cor: string; texto: string } {
-  const nome = ROTULO[p.mercado] ?? p.mercado;
+  const nome = rotuloMercado(p.mercado);
   const chance = p.prob_final != null ? ` modelo vê ${(p.prob_final * 100).toFixed(0)}%` : '';
   const justo = p.prob_final ? ` (justo seria @${(1 / p.prob_final).toFixed(2)})` : '';
 
@@ -211,7 +211,7 @@ function TabelaNumeros({ pernas }: { pernas: Perna[] }) {
         <tbody>
           {pernas.map((p, i) => (
             <tr key={i} className={`border-t border-borda/60 ${p.aprovada ? '' : 'opacity-60'}`}>
-              <td className="px-3 py-1.5 text-t1">{ROTULO[p.mercado] ?? p.mercado}</td>
+              <td className="px-3 py-1.5 text-t1">{rotuloMercado(p.mercado)}</td>
               <td className="px-2 py-1.5 text-t2">{pct(p.prob_heuristica)}</td>
               <td className="px-2 py-1.5 text-t2">{p.prob_dixon_coles == null ? '—' : pct(p.prob_dixon_coles)}</td>
               <td className="px-2 py-1.5 font-mono text-t2">{p.odd ?? '—'}</td>
