@@ -1,0 +1,29 @@
+# Cache correto pra SPA com assets hasheados.
+#
+# O bug da tela preta: o Safari do iPhone reusou um index.html antigo, que apontava pro JS
+# do deploy anterior — e esse arquivo ja nao existe mais no CDN (404). Sem o modulo, nada
+# monta e a pagina fica preta, sem erro visivel.
+#
+# index.html NUNCA pode ser cacheado (e o mapa que aponta pros assets do deploy atual).
+# Os assets, por terem hash no nome, podem ser cacheados pra sempre.
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# SPA: qualquer rota cai no index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

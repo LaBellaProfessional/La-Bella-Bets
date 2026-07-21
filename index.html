@@ -1,13 +1,94 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>bella-bets</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0d0f14" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <title>Bella Bets</title>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <!--
+      GUARDA DE BOOT.
+      O que aconteceu em 21/07: o Safari do iPhone reusou um index.html antigo do cache, que
+      apontava pro JS de um deploy anterior. Esse arquivo já não existe no CDN (404), o módulo
+      nunca carrega e a tela fica PRETA e muda — sem erro, sem pista.
+      Aqui: detecta o boot que não aconteceu, recarrega UMA vez furando o cache e, se ainda
+      assim falhar, mostra o motivo na tela em vez de deixar o usuário no escuro.
+    -->
+    <script>
+      (function () {
+        var CHAVE = 'bella-boot-retry';
+
+        function mostrarFalha(motivo) {
+          var raiz = document.getElementById('root');
+          if (!raiz || raiz.innerHTML) return;
+
+          var caixa = document.createElement('div');
+          caixa.style.cssText = 'font-family:system-ui,-apple-system,sans-serif;color:#e8eaed;padding:32px 24px;text-align:center';
+
+          var titulo = document.createElement('h1');
+          titulo.textContent = 'Não consegui carregar o app';
+          titulo.style.cssText = 'font-size:18px;margin:0 0 8px';
+
+          var texto = document.createElement('p');
+          texto.textContent = motivo;
+          texto.style.cssText = 'color:#9aa3b2;font-size:13px;margin:0 0 20px;line-height:1.5';
+
+          var botao = document.createElement('button');
+          botao.textContent = 'Tentar de novo';
+          botao.style.cssText = 'background:#f0357a;color:#fff;border:0;border-radius:6px;padding:12px 20px;font-size:14px;font-weight:600';
+          botao.onclick = function () {
+            try { sessionStorage.removeItem(CHAVE); } catch (e) { /* modo privado */ }
+            location.replace(location.pathname + '?v=' + Date.now());
+          };
+
+          caixa.appendChild(titulo);
+          caixa.appendChild(texto);
+          caixa.appendChild(botao);
+          raiz.appendChild(caixa);
+        }
+
+        function falhou(motivo) {
+          var jaTentou;
+          try { jaTentou = sessionStorage.getItem(CHAVE); } catch (e) { jaTentou = '1'; }
+          if (!jaTentou) {
+            try { sessionStorage.setItem(CHAVE, '1'); } catch (e) { /* ignora */ }
+            location.replace(location.pathname + '?v=' + Date.now());
+            return;
+          }
+          mostrarFalha(motivo);
+        }
+
+        // Arquivo do app que não baixou (o caso do 404 acima).
+        window.addEventListener('error', function (e) {
+          var alvo = e.target;
+          if (alvo && (alvo.tagName === 'SCRIPT' || alvo.tagName === 'LINK')) {
+            falhou('Um arquivo do app não foi encontrado — provavelmente uma versão antiga em cache.');
+          }
+        }, true);
+
+        // Rede lenta ou erro de execução: se nada montou, também é tela preta.
+        setTimeout(function () {
+          var raiz = document.getElementById('root');
+          if (raiz && !raiz.innerHTML) falhou('O app não iniciou a tempo.');
+        }, 6000);
+
+        // Montou: limpa a marca para a próxima falha poder tentar de novo.
+        window.addEventListener('load', function () {
+          setTimeout(function () {
+            var raiz = document.getElementById('root');
+            if (raiz && raiz.innerHTML) {
+              try { sessionStorage.removeItem(CHAVE); } catch (e) { /* ignora */ }
+            }
+          }, 1000);
+        });
+      })();
+    </script>
   </body>
 </html>
