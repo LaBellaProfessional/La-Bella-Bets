@@ -2,12 +2,12 @@
  * PARTE 4 — MONTADOR DE BILHETE.
  *
  * Regras duras (o método é o produto; quantidade nunca dilui critério):
- *  - odd combinada entre 1.40 e 1.60
- *  - 2 pernas tipicamente, 3 só se as odds forem muito baixas
+ *  - odd do bilhete entre 1.40 e 1.60
+ *  - 1 perna quando ela sozinha já paga a faixa; 2 tipicamente; 3 só com odds muito baixas
  *  - uma perna NÃO se repete entre bilhetes (perder um jogo não derruba dois bilhetes)
  *  - teto de exposição diária de 8% da banca somando tudo
  *  - correlação intra-jogo sai da matriz de placares, não de multiplicação ingênua
- *  - menos de 2 pernas aprovadas ⇒ SEM BILHETE HOJE (resultado válido e desejado)
+ *  - nenhuma perna aprovada ⇒ SEM BILHETE HOJE (resultado válido e desejado)
  */
 import { CONFIANCA } from './tipos.js';
 import { probConjuntaMesmoJogo } from './dixonColes.js';
@@ -51,21 +51,23 @@ export function montarBilhetes({ aprovadas, matrizes, config, banca }) {
   const f = config.filtros;
   const elegiveis = aprovadas.filter((p) => p.elegivel_bilhete);
 
-  if (elegiveis.length < 2) {
+  if (!elegiveis.length) {
     return {
       sem_bilhete: true,
-      motivo:
-        elegiveis.length === 0
-          ? 'nenhuma perna passou nos filtros hoje'
-          : 'só 1 perna aprovada — bilhete exige no mínimo 2 pernas',
+      motivo: 'nenhuma perna passou nos filtros hoje',
       bilhetes: [],
       exposicao: { total_rs: 0, pct_banca: 0, teto_pct: config.teto_exposicao_diaria_pct },
     };
   }
 
-  // Candidatos: pares e trios dentro da faixa de odd.
+  // Candidatos: SIMPLES, pares e trios dentro da faixa de odd.
+  //
+  // Simples (21/07): perna aprovada cuja odd sozinha já cai na faixa vira bilhete de 1 perna,
+  // com os mesmos filtros e o mesmo stake. Faz sentido de risco: juntar duas pernas de 1.20
+  // pra chegar em 1.44 entrega a MESMA odd de uma simples de 1.44, mas com o dobro de jogos
+  // que podem dar errado. Quando a perna sozinha já paga a faixa, combinar só adiciona risco.
   const candidatos = [];
-  for (const k of [2, 3]) {
+  for (const k of [1, 2, 3]) {
     for (const combo of combinar(elegiveis, k)) {
       const oddTotal = combo.reduce((s, p) => s * p.odd, 1);
       if (oddTotal < f.odd_bilhete_min || oddTotal > f.odd_bilhete_max) continue;
@@ -102,7 +104,7 @@ export function montarBilhetes({ aprovadas, matrizes, config, banca }) {
   if (!candidatos.length) {
     return {
       sem_bilhete: true,
-      motivo: `há ${elegiveis.length} perna(s) aprovada(s), mas nenhuma combinação fecha odd entre ${f.odd_bilhete_min} e ${f.odd_bilhete_max}`,
+      motivo: `há ${elegiveis.length} perna(s) aprovada(s), mas nenhuma — sozinha ou combinada — fecha odd entre ${f.odd_bilhete_min} e ${f.odd_bilhete_max}`,
       bilhetes: [],
       exposicao: { total_rs: 0, pct_banca: 0, teto_pct: config.teto_exposicao_diaria_pct },
     };
