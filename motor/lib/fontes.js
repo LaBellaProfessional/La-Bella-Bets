@@ -75,6 +75,8 @@ export async function buscarJogosDoDia(ligasAtivas, data) {
       // Sem os ids não dá pra buscar histórico — era o furo do caminho real.
       casa_id: f.teams.home.id,
       fora_id: f.teams.away.id,
+      // Horário de início: é a segunda prova no casamento com a odd (nome + horário).
+      inicio: f.fixture.date,
     });
   }
   return jogos;
@@ -190,6 +192,19 @@ function mesmoTime(a, b) {
   return A.uf.size === B.uf.size;
 }
 
+/**
+ * Casamento FROUXO: um nome contém o outro inteiro ("Novorizontino" ⊂ "Grêmio Novorizontino").
+ * Só pode ser usado junto da prova de horário — sozinho gera falso positivo.
+ */
+function contido(a, b) {
+  const A = partesDe(a), B = partesDe(b);
+  if (!A.nucleo.size || !B.nucleo.size) return false;
+  if (A.uf.size && B.uf.size && !mesmoConjunto(A.uf, B.uf)) return false;
+  const menor = A.nucleo.size <= B.nucleo.size ? A.nucleo : B.nucleo;
+  const maior = A.nucleo.size <= B.nucleo.size ? B.nucleo : A.nucleo;
+  return [...menor].every((t) => maior.has(t));
+}
+
 /** Melhor odd (maior) entre as casas, por mercado. */
 function melhorOdd(bookmakers, mercadoKey, nomeResultado, ponto) {
   let melhor = null;
@@ -240,9 +255,27 @@ export async function buscarOddsDosJogos(jogos) {
     }
 
     for (const j of doGrupo) {
-      const candidatos = eventos.filter(
+      // 1ª tentativa: casamento ESTRITO por nome (núcleo idêntico + estado compatível).
+      let candidatos = eventos.filter(
         (e) => mesmoTime(e.home_team, j.casa) && mesmoTime(e.away_team, j.fora)
       );
+
+      // 2ª tentativa: nome FROUXO (um contém o outro) + HORÁRIO batendo em até 3h.
+      // Sozinho, o nome frouxo casaria "São Paulo" com "São Paulo Crystal". Exigindo os DOIS
+      // times E o horário de início, a chance de colisão vira desprezível — e é o que resgata
+      // casos legítimos como "Novorizontino" x "Grêmio Novorizontino".
+      if (!candidatos.length && j.inicio) {
+        const tJogo = new Date(j.inicio).getTime();
+        candidatos = eventos.filter((e) => {
+          if (!e.commence_time) return false;
+          const dif = Math.abs(new Date(e.commence_time).getTime() - tJogo);
+          if (dif > 3 * 3600 * 1000) return false;
+          return contido(e.home_team, j.casa) && contido(e.away_team, j.fora);
+        });
+        if (candidatos.length === 1) {
+          diagnostico.push(`casado por nome+horário: "${j.casa} x ${j.fora}" ≈ "${candidatos[0].home_team} x ${candidatos[0].away_team}"`);
+        }
+      }
       // Unicidade: 2 eventos casando com a mesma partida significa que o casamento não é
       // confiável. Preferir ficar sem odd (perna descartada) a arriscar a odd do jogo errado.
       if (candidatos.length > 1) {

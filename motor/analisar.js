@@ -42,6 +42,7 @@ async function main() {
 
   // ── 1. Dados
   let jogos, historico, h2h, odds;
+  let jogosPorLiga = {};
   if (modo === 'demo') {
     ({ jogos, historico, h2h, odds } = gerarDemo(dataAlvo, ligasAtivas));
   } else {
@@ -52,7 +53,16 @@ async function main() {
     for (const j of jogos) {
       historico[j.casa] = await buscarHistoricoTime(j.casa_id, j.casa, cache);
       historico[j.fora] = await buscarHistoricoTime(j.fora_id, j.fora, cache);
+      // H2H vem do bootstrap, chaveado por par de ids (a ordem do mando pode inverter).
+      h2h[j.id] = cache.h2h?.[`${j.casa_id}-${j.fora_id}`] ?? cache.h2h?.[`${j.fora_id}-${j.casa_id}`] ?? [];
     }
+    // Jogos da temporada por liga: base MUITO melhor pro Dixon-Coles do que juntar o
+    // histórico dos 2 times do dia (que só enxerga um pedaço da liga).
+    jogosPorLiga = Object.fromEntries(
+      Object.values(cache.ligas ?? {}).map((l) => [l.nome, l.jogos ?? []])
+    );
+    const semCache = jogos.filter((j) => !(historico[j.casa] ?? []).length || !(historico[j.fora] ?? []).length);
+    if (semCache.length) log(`   ⚠ ${semCache.length} jogo(s) com time fora do cache — rode: npm run bootstrap`);
     gravarCache(path.join(DIR_DADOS, 'historico_times.json'), cache);
     const res = await buscarOddsDosJogos(jogos);
     odds = res.odds;
@@ -89,8 +99,11 @@ async function main() {
   for (const liga of new Set(jogos.map((j) => j.liga))) {
     const daLiga = jogos.filter((j) => j.liga === liga);
     const times = new Set(daLiga.flatMap((j) => [j.casa, j.fora]));
-    const jogosLiga = [];
-    const vistos = new Set();
+    // Preferência: temporada inteira da liga (bootstrap). Só cai pro histórico dos times do
+    // dia quando o cache não tem a liga — aí a amostra é menor e o modelo pode se declarar
+    // indisponível, que é o comportamento certo.
+    const jogosLiga = [...(jogosPorLiga[liga] ?? [])];
+    const vistos = new Set(jogosLiga.map((jg) => `${jg.data}|${jg.casa}|${jg.fora}`));
     for (const t of times) {
       for (const jg of historico[t] ?? []) {
         const chave = `${jg.data}|${jg.casa}|${jg.fora}`;

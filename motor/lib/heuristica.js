@@ -56,12 +56,16 @@ function taxaNoBloco(jogos, mercado, time) {
 }
 
 /**
- * Handicap é mercado DIRECIONAL: olha o time do lado apostado, não a média dos dois.
- * Dupla chance/over/under seguem a média dos dois times (o método do Maikon).
+ * Mercado DIRECIONAL olha só o time do lado apostado; mercado de PLACAR olha os dois.
+ *
+ * Dupla chance é direcional: "1X" é o mandante não perder, "X2" é o visitante não perder.
+ * Fazer média dos dois times dava o MESMO número pros dois mercados (1X = X2 = 52%), o que
+ * é sem sentido — e gerava divergência falsa contra o Dixon-Coles, derrubando pernas boas.
+ * Over/under continuam com os dois times: total de gols depende dos dois ataques e defesas.
  */
 function perspectivaDoMercado(mercado, casa, fora) {
-  if (mercado === 'ah_fora_p05') return [fora];
-  if (mercado.startsWith('ah_casa')) return [casa];
+  if (mercado === 'ah_fora_p05' || mercado === 'dupla_chance_fora') return [fora];
+  if (mercado.startsWith('ah_casa') || mercado === 'dupla_chance_casa') return [casa];
   return [casa, fora];
 }
 
