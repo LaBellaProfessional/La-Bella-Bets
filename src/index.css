@@ -4,3 +4,10 @@
 
 html, body, #root { background: #0d0f14; color: #e8eaed; min-height: 100%; }
 body { font-family: Inter, system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+
+/* Regra do projeto: NUNCA scroll lateral no mobile. Isto é a rede de segurança — o conserto
+   de verdade é cada componente caber. Nome de time longo ou mensagem de erro comprida não
+   podem empurrar a largura da página. */
+html, body { overflow-x: hidden; max-width: 100%; }
+#root { width: 100%; overflow-x: hidden; }
+body { overflow-wrap: break-word; }

@@ -138,7 +138,9 @@ function Dash() {
             config={config}
             carregando={qJanela.isLoading}
             jaRegistrados={bilhetes ?? []}
-            onRegistrar={(e) => registrar.mutate(e)}
+            // mutateAsync (e não mutate): o card precisa do erro pra mostrar na tela.
+            // Com mutate, a falha morre no estado do hook e a tela finge que nada aconteceu.
+            onRegistrar={(e) => registrar.mutateAsync(e)}
             onAnalisar={() => rodar('analisar')}
           />
         )}

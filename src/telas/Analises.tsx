@@ -193,11 +193,39 @@ export function Analises({ analise }: { analise: Analise | null }) {
   );
 }
 
-/** O detalhe técnico de sempre — nada se perde, só sai da primeira camada. */
+/**
+ * O detalhe técnico de sempre — nada se perde, só sai da primeira camada.
+ *
+ * DUAS FORMAS, mesmo conteúdo. A tabela de seis colunas não cabe em 390px: ela vivia num
+ * container de rolagem horizontal, e arrastar o dedo em cima dela rolava a tela pro lado.
+ * A página nunca rolou (medi: scrollWidth 390 = clientWidth 390) — quem rolava era a tabela,
+ * e pro dedo é a mesma coisa. No celular o mesmo dado vira lista empilhada; no desktop
+ * continua tabela, que é onde comparar linha a linha vale a pena.
+ */
 function TabelaNumeros({ pernas }: { pernas: Perna[] }) {
   return (
-    <div className="mt-2 overflow-x-auto rounded border border-borda">
-      <table className="w-full min-w-[520px] text-xs">
+    <>
+      <div className="mt-2 space-y-1.5 sm:hidden">
+        {pernas.map((p, i) => (
+          <div key={i} className={`rounded border border-borda px-2.5 py-2 text-xs ${p.aprovada ? '' : 'opacity-60'}`}>
+            <div className="flex flex-wrap items-baseline gap-x-2">
+              <span className="font-medium text-t1 break-words">{rotuloMercado(p.mercado)}</span>
+              <span className="ml-auto font-mono text-t2">{p.odd ?? '—'}</span>
+            </div>
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-t3">
+              <span>retrovisor {pct(p.prob_heuristica)}</span>
+              <span>matemática {p.prob_dixon_coles == null ? '—' : pct(p.prob_dixon_coles)}</span>
+              <span className={(p.ev ?? 0) > 1 ? 'text-verde' : undefined}>
+                vantagem {p.ev == null ? '—' : `${((p.ev - 1) * 100).toFixed(1)}%`}
+              </span>
+              <span>mando {p.amostra_mando} jogos</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-2 hidden rounded border border-borda sm:block">
+      <table className="w-full text-xs">
         <thead>
           <tr className="text-left text-[10px] uppercase tracking-wider text-t3">
             <th className="px-3 py-2 font-medium">Mercado</th>
@@ -223,6 +251,7 @@ function TabelaNumeros({ pernas }: { pernas: Perna[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 }
