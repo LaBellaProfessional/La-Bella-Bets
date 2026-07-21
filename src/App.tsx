@@ -4,7 +4,7 @@ import { supabase } from './supabase';
 import { Login } from './Login';
 import {
   useConfig, useDatas, useAnalise, useBilhetes,
-  useRegistrarBilhete, useDefinirResultado, useSalvarConfig, useRodarMotor,
+  useRegistrarBilhete, useDefinirResultado, useSalvarConfig, useRodarMotor, useJanela,
   type Bilhete,
 } from './dados';
 import { Hoje } from './telas/Hoje';
@@ -39,11 +39,19 @@ function Dash() {
   const [aba, setAba] = useState<Aba>('hoje');
   const [dataSel, setDataSel] = useState<string | null>(null);
 
-  const { data: config } = useConfig();
-  const { data: datas } = useDatas();
+  const qConfig = useConfig();
+  const qDatas = useDatas();
+  const config = qConfig.data;
+  const datas = qDatas.data;
   const data = dataSel ?? datas?.[0] ?? null;
-  const { data: analise } = useAnalise(data);
+  const qAnalise = useAnalise(data);
+  const analise = qAnalise.data;
   const { data: bilhetes } = useBilhetes();
+  const { data: janela } = useJanela(data);
+
+  // Falha de consulta NAO pode virar tela vazia: sem isso, 'sem dado' e 'sem conexao'
+  // ficam iguais na tela e o diagnostico vira advinhacao.
+  const erroQuery = qConfig.error ?? qDatas.error ?? qAnalise.error;
 
   const registrar = useRegistrarBilhete();
   const definirResultado = useDefinirResultado();
@@ -110,9 +118,18 @@ function Dash() {
       </header>
 
       <main className="mx-auto max-w-4xl px-4 py-5 pb-16">
+        {erroQuery && (
+          <div className="mb-4 rounded-lg border border-vermelho/40 bg-vermelho/10 px-4 py-3 text-sm text-vermelho">
+            <b>Falha ao carregar dados.</b> {(erroQuery as Error).message}
+          </div>
+        )}
         {aba === 'hoje' && (
           <Hoje
             analise={analise ?? null}
+            carregando={qAnalise.isLoading}
+            data={data}
+            onAnalisar={() => rodar('analisar', { data })}
+            janela={janela ?? []}
             jaRegistrados={(bilhetes ?? []).map((b) => ({ ...b, stake_rs: b.stake_real })) as never}
             onRegistrar={(b: Bilhete, valor: number) =>
               data && registrar.mutate({ bilhete: b, data, valor })}

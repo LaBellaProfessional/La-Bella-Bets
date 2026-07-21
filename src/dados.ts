@@ -13,6 +13,10 @@ export const ROTULO: Record<string, string> = {
 };
 
 export interface Perna {
+  horizonte_dias?: number;
+  radar?: boolean;
+  motivo_radar?: string;
+  trajetoria?: { primeira_odd: number; melhor_odd: number; odd_atual: number | null; observacoes: number; idade_horas: number; movimento: number | null };
   jogo_id: string; partida: string; liga: string; hora: string;
   mercado: string; odd: number | null;
   prob_heuristica: number | null; prob_dixon_coles: number | null; prob_final?: number;
@@ -37,6 +41,8 @@ export interface Analise {
   sem_bilhete: { motivo: string } | null;
   exposicao: { total_rs: number; pct_banca: number; teto_pct: number; teto_rs?: number } | null;
   config_efetivo?: { filtros: Record<string, number> };
+  radar?: (Perna & { motivo_radar?: string; horizonte_dias?: number })[];
+  horizonte_dias?: number;
   cards_handicap: (Perna & { vantagem_pp: number; stake_rs: number; observacao: string })[];
   avisos?: string[];
 }
@@ -184,3 +190,18 @@ export const brl = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 2 });
 export const pct = (v: number | null | undefined, casas = 0) =>
   v == null ? '—' : `${(v * 100).toFixed(casas)}%`;
+
+/** Analises dos proximos dias (D+1..D+3) — alimenta 'oportunidades antecipadas'. */
+export function useJanela(dataBase: string | null) {
+  return useQuery<Analise[]>({
+    queryKey: ['janela', dataBase],
+    enabled: Boolean(dataBase),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('analises').select('payload')
+        .gt('data', dataBase).order('data', { ascending: true }).limit(3);
+      if (error) throw error;
+      return (data ?? []).map((r) => r.payload as Analise);
+    },
+  });
+}

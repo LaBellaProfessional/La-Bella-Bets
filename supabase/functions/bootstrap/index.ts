@@ -21,6 +21,18 @@ const sb = createClient(
   { auth: { persistSession: false } },
 );
 
+// CORS: o dash roda em bella-bets-maikon.netlify.app e chama daqui. Sem responder o
+// preflight (OPTIONS) e sem devolver os cabecalhos em TODA resposta, o Safari aborta a
+// chamada antes de ela sair — vira 'Load failed' no iPhone, sem log nenhum no servidor.
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+const json = (corpo: unknown, status = 200) =>
+  new Response(JSON.stringify(corpo), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+
+
 const API = 'https://v3.football.api-sports.io';
 const PRIORIDADE = [72, 98]; // Série B e J-League primeiro
 
@@ -54,6 +66,7 @@ async function descobrirTemporada(ligaId: number) {
 }
 
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   const t0 = Date.now();
   let corpo: any = {};
   try { corpo = await req.json(); } catch { /* vazio */ }
@@ -62,7 +75,7 @@ Deno.serve(async (req) => {
   const ehServico = auth === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!ehServico) {
     const { data: u } = await sb.auth.getUser(auth);
-    if (!u?.user) return Response.json({ ok: false, erro: 'não autenticado' }, { status: 401 });
+    if (!u?.user) return json({ ok: false, erro: 'não autenticado' }, 401);
   }
 
   const { data: exec } = await sb.from('execucoes')
@@ -100,7 +113,7 @@ Deno.serve(async (req) => {
       await sb.from('execucoes').update({
         terminado_em: new Date().toISOString(), ok: true, detalhe: { refit: feitos, ms: Date.now() - t0 },
       }).eq('id', exec?.id);
-      return Response.json({ ok: true, refit: feitos, faltam: faltamRefit, ms: Date.now() - t0 });
+      return json({ ok: true, refit: feitos, faltam: faltamRefit, ms: Date.now() - t0 });
     }
 
     // ── BOOTSTRAP: busca dados. Lote pequeno por invocação (tempo limite da function).
@@ -170,12 +183,12 @@ Deno.serve(async (req) => {
       detalhe: { resumo, h2h_novos: h2hNovos, faltam, ms: Date.now() - t0 },
     }).eq('id', exec?.id);
 
-    return Response.json({ ok: true, resumo, h2h_novos: h2hNovos, faltam, req_football: reqs, ms: Date.now() - t0 });
+    return json({ ok: true, resumo, h2h_novos: h2hNovos, faltam, req_football: reqs, ms: Date.now() - t0 });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     await sb.from('execucoes').update({
       terminado_em: new Date().toISOString(), ok: false, detalhe: { erro: msg },
     }).eq('id', exec?.id);
-    return Response.json({ ok: false, erro: msg }, { status: 500 });
+    return json({ ok: false, erro: msg }, 500);
   }
 });
