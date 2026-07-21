@@ -1,15 +1,44 @@
 {
   "data": "2026-07-24",
   "modo": "demo",
-  "gerado_em": "2026-07-21T15:00:10.343Z",
+  "gerado_em": "2026-07-21T15:09:07.231Z",
   "banca_no_momento": 1000,
+  "config_efetivo": {
+    "filtros": {
+      "odd_minima_perna": 1.2,
+      "ev_minimo": 1.03,
+      "divergencia_maxima_pp": 10,
+      "amostra_minima_mando": 7,
+      "odd_bilhete_min": 1.4,
+      "odd_bilhete_max": 2.2,
+      "max_bilhetes_dia": 3,
+      "confianca_maxima_prob": 0.8,
+      "confianca_maxima_ev": 0.06,
+      "ah_vantagem_minima_pp": 3,
+      "ev_teto_suspeito": 0.35
+    },
+    "pesos_heuristica": {
+      "mando": 0.5,
+      "geral": 0.3,
+      "h2h": 0.2,
+      "sem_h2h": {
+        "mando": 0.6,
+        "geral": 0.4
+      }
+    },
+    "dixon_coles": {
+      "xi": 0.0065,
+      "min_jogos_liga": 60,
+      "max_gols_matriz": 6
+    }
+  },
   "resumo": {
     "jogos": 11,
     "pernas_avaliadas": 88,
     "aprovadas": 5,
     "descartadas": 83,
-    "bilhetes": 0,
-    "sem_bilhete": true
+    "bilhetes": 1,
+    "sem_bilhete": false
   },
   "dixon_coles_por_liga": {
     "Brasileirão Série A": {
@@ -1532,13 +1561,72 @@
       "motivo": "amostra insuficiente no mando: 4 jogos (mínimo 7)"
     }
   ],
-  "bilhetes": [],
-  "sem_bilhete": {
-    "motivo": "há 4 perna(s) aprovada(s), mas nenhuma combinação fecha odd entre 1.4 e 1.6"
-  },
+  "bilhetes": [
+    {
+      "pernas": [
+        {
+          "jogo_id": "demo-11-0",
+          "partida": "Racing x Cruzeiro",
+          "liga": "Copa Sul-Americana",
+          "hora": "15:30",
+          "casa": "Racing",
+          "fora": "Cruzeiro",
+          "mercado": "under_45",
+          "odd": 1.41,
+          "prob_heuristica": 0.8225,
+          "prob_dixon_coles": null,
+          "amostra_mando": 8,
+          "aprovada": true,
+          "prob_final": 0.7813749999999999,
+          "ev": 1.1017387499999998,
+          "ev_pct": 10.173874999999978,
+          "confianca": "APROVADA",
+          "dixon_coles_disponivel": false,
+          "justificativa": "78% pelo modelo (só heurística (liga sem amostra p/ DC)), EV +10.2%, 8 jogos no mando.",
+          "elegivel_bilhete": true
+        },
+        {
+          "jogo_id": "demo-11-1",
+          "partida": "Independiente x Lanús",
+          "liga": "Copa Sul-Americana",
+          "hora": "17:30",
+          "casa": "Independiente",
+          "fora": "Lanús",
+          "mercado": "over_15",
+          "odd": 1.39,
+          "prob_heuristica": 0.9550000000000001,
+          "prob_dixon_coles": null,
+          "amostra_mando": 7,
+          "aprovada": true,
+          "prob_final": 0.90725,
+          "ev": 1.2610774999999999,
+          "ev_pct": 26.107749999999985,
+          "confianca": "APROVADA",
+          "dixon_coles_disponivel": false,
+          "justificativa": "91% pelo modelo (só heurística (liga sem amostra p/ DC)), EV +26.1%, 7 jogos no mando.",
+          "elegivel_bilhete": true
+        }
+      ],
+      "n_pernas": 2,
+      "odd_total": 1.9598999999999998,
+      "prob_combinada": 0.70890246875,
+      "valor_justo": 1.4106312843899234,
+      "ev": 1.3893779485031248,
+      "ev_pct": 38.93779485031248,
+      "n_confianca_maxima": 0,
+      "todas_confianca_maxima": false,
+      "correlacao_intra_jogo": false,
+      "stake_pct": 3,
+      "stake_rs": 30,
+      "ordem": 1
+    }
+  ],
+  "sem_bilhete": null,
   "exposicao": {
-    "total_rs": 0,
-    "pct_banca": 0
+    "total_rs": 30,
+    "pct_banca": 3,
+    "teto_pct": 8,
+    "teto_rs": 80
   },
   "cards_handicap": [
     {

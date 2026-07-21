@@ -1,8 +1,37 @@
 {
   "data": "2026-07-22",
   "modo": "demo",
-  "gerado_em": "2026-07-21T15:00:06.802Z",
+  "gerado_em": "2026-07-21T15:09:01.736Z",
   "banca_no_momento": 1000,
+  "config_efetivo": {
+    "filtros": {
+      "odd_minima_perna": 1.2,
+      "ev_minimo": 1.03,
+      "divergencia_maxima_pp": 10,
+      "amostra_minima_mando": 7,
+      "odd_bilhete_min": 1.4,
+      "odd_bilhete_max": 1.6,
+      "max_bilhetes_dia": 3,
+      "confianca_maxima_prob": 0.8,
+      "confianca_maxima_ev": 0.06,
+      "ah_vantagem_minima_pp": 3,
+      "ev_teto_suspeito": 0.35
+    },
+    "pesos_heuristica": {
+      "mando": 0.5,
+      "geral": 0.3,
+      "h2h": 0.2,
+      "sem_h2h": {
+        "mando": 0.6,
+        "geral": 0.4
+      }
+    },
+    "dixon_coles": {
+      "xi": 0.0065,
+      "min_jogos_liga": 60,
+      "max_gols_matriz": 6
+    }
+  },
   "resumo": {
     "jogos": 11,
     "pernas_avaliadas": 88,
@@ -1492,7 +1521,8 @@
   },
   "exposicao": {
     "total_rs": 0,
-    "pct_banca": 0
+    "pct_banca": 0,
+    "teto_pct": 8
   },
   "cards_handicap": []
 }
