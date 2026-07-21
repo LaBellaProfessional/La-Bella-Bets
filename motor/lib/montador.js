@@ -59,7 +59,7 @@ export function montarBilhetes({ aprovadas, matrizes, config, banca }) {
           ? 'nenhuma perna passou nos filtros hoje'
           : 'só 1 perna aprovada — bilhete exige no mínimo 2 pernas',
       bilhetes: [],
-      exposicao: { total_rs: 0, pct_banca: 0, teto_pct: f.teto_exposicao_diaria_pct },
+      exposicao: { total_rs: 0, pct_banca: 0, teto_pct: config.teto_exposicao_diaria_pct },
     };
   }
 
@@ -100,7 +100,7 @@ export function montarBilhetes({ aprovadas, matrizes, config, banca }) {
       sem_bilhete: true,
       motivo: `há ${elegiveis.length} perna(s) aprovada(s), mas nenhuma combinação fecha odd entre ${f.odd_bilhete_min} e ${f.odd_bilhete_max}`,
       bilhetes: [],
-      exposicao: { total_rs: 0, pct_banca: 0, teto_pct: f.teto_exposicao_diaria_pct },
+      exposicao: { total_rs: 0, pct_banca: 0, teto_pct: config.teto_exposicao_diaria_pct },
     };
   }
 
@@ -124,7 +124,7 @@ export function montarBilhetes({ aprovadas, matrizes, config, banca }) {
   }
 
   // Teto de exposição: corta o de menor EV até caber.
-  const tetoRS = banca * (f.teto_exposicao_diaria_pct / 100);
+  const tetoRS = banca * (config.teto_exposicao_diaria_pct / 100);
   let cortados = [];
   let total = escolhidos.reduce((s, b) => s + b.stake_rs, 0);
   while (total > tetoRS && escolhidos.length > 1) {
@@ -142,7 +142,7 @@ export function montarBilhetes({ aprovadas, matrizes, config, banca }) {
     exposicao: {
       total_rs: +total.toFixed(2),
       pct_banca: +((total / banca) * 100).toFixed(2),
-      teto_pct: f.teto_exposicao_diaria_pct,
+      teto_pct: config.teto_exposicao_diaria_pct,
       teto_rs: +tetoRS.toFixed(2),
     },
   };
