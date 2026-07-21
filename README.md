@@ -77,3 +77,35 @@ Os dois números estão em `data/config.json` (`odd_bilhete_max`, `odd_minima_pe
 editáveis pelo dash. Para referência, as análises de **24/07 e 26/07** foram geradas com
 `odd_bilhete_max = 2.20` só pra demonstrar a tela de bilhete populada — cada análise grava o
 `config_efetivo` que a produziu, e o dash mostra essa faixa no topo da aba Análises.
+
+## Ferramentas
+
+### `npm run medir-viewport -- <url> [largura] [altura]`
+
+Caça elementos que estouram a largura da tela. Regra do projeto: **nunca scroll lateral no
+mobile** — e "a tela rola pro lado" tem duas causas que parecem iguais no dedo e são
+diferentes no código:
+
+1. **a página rola** — `scrollWidth > clientWidth`, alguém estourou o body;
+2. **um container interno rola** — a página está certa, mas há uma tabela de 520px dentro de
+   um card de 358px com `overflow-x-auto`.
+
+Foi o caso 2 que gerou o bug de 21/07 na aba Análises, e ler o CSS não respondia: só medindo.
+O script mede as duas coisas e nomeia o elemento culpado. Roda Chrome headless via CDP puro —
+sem puppeteer, sem playwright, sem instalar nada. Sai com código 1 quando acha problema.
+
+```bash
+npm run dev
+npm run medir-viewport -- http://localhost:5173/ 390 844
+```
+
+```
+{ "clientWidth": 390, "scrollWidth": 390, "rolaLateral": false,
+  "culpados": [], "containersRolantes": [] }
+✓ 390px: nada estoura a largura e nada rola na horizontal.
+```
+
+**Tela atrás de login:** o dash exige sessão, então medir a tela de login não prova nada sobre
+as telas que têm conteúdo. Monte um harness — um `.tsx` que renderiza os componentes com um
+payload real da tabela `analises` injetado em `window` — e aponte o script pra ele. Foi assim
+que a tabela de 520px foi encontrada.

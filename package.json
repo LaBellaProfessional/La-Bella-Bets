@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "analisar": "node motor/analisar.js",
     "bootstrap": "node motor/bootstrap.js",
-    "migrar": "node motor/migrar.js"
+    "migrar": "node motor/migrar.js",
+    "medir-viewport": "node scripts/medir-viewport.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",
