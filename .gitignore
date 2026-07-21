@@ -6,3 +6,6 @@ dist
 
 # Local Netlify folder
 .netlify
+
+# Snapshots de dados de aposta — histórico financeiro não vai pro git.
+backup/
