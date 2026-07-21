@@ -88,7 +88,34 @@ export function probHeuristica({ mercado, casa, fora, historico, h2h, pesos }) {
   const h2hJogos = (h2h ?? []).slice(0, 3);
   const temH2H = h2hJogos.length > 0;
 
-  const p = temH2H ? pesos : { mando: pesos.sem_h2h.mando, geral: pesos.sem_h2h.geral, h2h: 0 };
+  const pBase = temH2H ? pesos : { mando: pesos.sem_h2h.mando, geral: pesos.sem_h2h.geral, h2h: 0 };
+
+  // Quem entra na conta: os dois times (mercados simétricos) ou só o lado apostado (handicap
+  // e dupla chance). A amostra do mando segue a mesma regra — num mercado direcional, o que
+  // importa é quantos jogos o TIME APOSTADO tem naquele mando.
+  const ladosAmostra = perspectivaDoMercado(mercado, casa, fora);
+  const amostraMando =
+    ladosAmostra.length === 2 ? Math.min(bCasa.mando.length, bFora.mando.length)
+    : ladosAmostra[0] === casa ? bCasa.mando.length
+    : bFora.mando.length;
+
+  // MANDO CURTO — rebaixar, não descartar (regra de 21/07).
+  // Com menos jogos no mando do que o ideal, o bloco de mando perde peso PROPORCIONALMENTE e
+  // a diferença vai pro bloco geral, que tem amostra maior. Jogar a perna fora desperdiçaria
+  // os 15 jogos gerais que já estão em cache — informação que o método manual sempre usou.
+  // Linear e simples: fator = jogos_no_mando / mando_pleno.
+  //   7+ jogos → fator 1.00 → mando 50%, geral 30%
+  //   6 jogos  → fator 0.86 → mando 43%, geral 37%
+  //   5 jogos  → fator 0.71 → mando 36%, geral 44%
+  const mandoPleno = pesos.mando_pleno ?? 7;
+  const fatorMando = Math.min(1, amostraMando / mandoPleno);
+  const pesoMando = pBase.mando * fatorMando;
+  const p = {
+    mando: pesoMando,
+    geral: pBase.geral + (pBase.mando - pesoMando), // a diferença não some: migra pro geral
+    h2h: pBase.h2h,
+  };
+  const amostraCurta = fatorMando < 1;
 
   // Cada bloco vira a média das taxas dos dois times (o H2H já é compartilhado).
   const media = (a, b) => {
@@ -123,19 +150,21 @@ export function probHeuristica({ mercado, casa, fora, historico, h2h, pesos }) {
   if (tMando !== null) { acc += tMando * p.mando; soma += p.mando; }
   if (tGeral !== null) { acc += tGeral * p.geral; soma += p.geral; }
   if (tH2H !== null) { acc += tH2H * p.h2h; soma += p.h2h; }
-  if (soma === 0) return { prob: null, amostra_mando: 0, confianca_amostra: 0, blocos: {} };
+  if (soma === 0) return { prob: null, amostra_mando: amostraMando, amostra_curta: amostraCurta, confianca_amostra: 0, blocos: {} };
 
   const prob = acc / soma;
 
   // Confiança da amostra: 10 jogos no mando = 1.0; cai proporcional. É o freio contra
   // achar que 3 jogos valem tanto quanto 10.
-  const amostraMando = Math.min(bCasa.mando.length, bFora.mando.length);
   const confAmostra = Math.min(1, amostraMando / 10);
 
   return {
     prob,
     amostra_mando: amostraMando,
+    amostra_curta: amostraCurta,
     confianca_amostra: confAmostra,
+    peso_mando_efetivo: +p.mando.toFixed(3),
+    peso_geral_efetivo: +p.geral.toFixed(3),
     blocos: {
       mando: tMando,
       geral: tGeral,

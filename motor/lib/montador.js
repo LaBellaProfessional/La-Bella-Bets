@@ -76,7 +76,10 @@ export function montarBilhetes({ aprovadas, matrizes, config, banca }) {
       const ev = prob * oddTotal;
       const nMaxima = combo.filter((p) => p.confianca === CONFIANCA.MAXIMA).length;
       const todasMaxima = nMaxima === combo.length;
-      const stakePct = todasMaxima ? config.stake_confianca_maxima_pct : config.stake_padrao_pct;
+      // Trava explícita: qualquer perna de amostra curta puxa o bilhete pro stake padrão,
+      // mesmo que o resto pareça excelente.
+      const temAmostraCurta = combo.some((p) => p.amostra_curta);
+      const stakePct = todasMaxima && !temAmostraCurta ? config.stake_confianca_maxima_pct : config.stake_padrao_pct;
 
       candidatos.push({
         pernas: combo,
@@ -89,6 +92,7 @@ export function montarBilhetes({ aprovadas, matrizes, config, banca }) {
         n_confianca_maxima: nMaxima,
         todas_confianca_maxima: todasMaxima,
         correlacao_intra_jogo: correlacionadas,
+        tem_amostra_curta: temAmostraCurta,
         stake_pct: stakePct,
         stake_rs: +(banca * (stakePct / 100)).toFixed(2),
       });

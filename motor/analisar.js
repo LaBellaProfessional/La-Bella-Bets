@@ -18,6 +18,7 @@ import { probHeuristica } from './lib/heuristica.js';
 import { ajustarDixonColes, matrizPlacares, mercadosDaMatriz } from './lib/dixonColes.js';
 import { avaliarPerna } from './lib/filtros.js';
 import { montarBilhetes, cardsHandicap } from './lib/montador.js';
+import { contagensDoJogo } from './lib/narrativa.js';
 import { temChaves, gerarDemo, lerCache, gravarCache, buscarJogosDoDia, buscarHistoricoTime, buscarOddsDosJogos, cota, limitacoesPlano } from './lib/fontes.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -200,7 +201,7 @@ function gravarAnalise({ modo, jogos, pernas, resultado, cardsAH, dc }) {
     dixon_coles_por_liga: Object.fromEntries(
       Object.entries(dc).map(([liga, m]) => [liga, { disponivel: m.disponivel, motivo: m.motivo ?? null, n_jogos: m.n_jogos ?? 0 }])
     ),
-    jogos,
+    jogos: jogos.map((j) => ({ ...j, contagens: contagensDoJogo(j, historico) })),
     pernas,
     bilhetes: resultado.bilhetes ?? [],
     sem_bilhete: resultado.sem_bilhete ? { motivo: resultado.motivo } : null,

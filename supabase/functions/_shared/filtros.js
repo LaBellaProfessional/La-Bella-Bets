@@ -26,8 +26,12 @@ export function avaliarPerna({ jogo, mercado, odd, probH, probDC, probPush, amos
   if (odd < filtros.odd_minima_perna)
     return { ...base, aprovada: false, motivo: MOTIVO.ODD_BAIXA(odd, filtros.odd_minima_perna) };
 
-  if (amostraMando < filtros.amostra_minima_mando)
-    return { ...base, aprovada: false, motivo: MOTIVO.AMOSTRA(amostraMando, filtros.amostra_minima_mando) };
+  // MANDO CURTO: descarta só abaixo do mínimo absoluto. Entre o mínimo e o pleno a perna
+  // segue avaliada, com o peso do mando já rebaixado na heurística e a confiança limitada.
+  const mandoMinimo = filtros.mando_minimo ?? filtros.amostra_minima_mando ?? 5;
+  const mandoPleno = filtros.mando_pleno ?? 7;
+  if (amostraMando < mandoMinimo)
+    return { ...base, aprovada: false, motivo: MOTIVO.AMOSTRA(amostraMando, mandoMinimo) };
 
   // Concordância entre modelos. Sem Dixon-Coles (liga sem amostra), opera só com heurística
   // e confiança rebaixada — não é motivo de descarte, é motivo de humildade.
@@ -62,7 +66,10 @@ export function avaliarPerna({ jogo, mercado, odd, probH, probDC, probPush, amos
   if (ev - 1 > filtros.ev_teto_suspeito)
     return { ...base, aprovada: false, motivo: MOTIVO.EV_SUSPEITO(ev, filtros.ev_teto_suspeito), prob_final: probFinal, ev };
 
+  // Amostra curta NUNCA vira confiança máxima: o dado é mais fino, o stake tem que ser o padrão.
+  const amostraCurta = amostraMando < mandoPleno;
   const maxima =
+    !amostraCurta &&
     temDC &&
     probH >= filtros.confianca_maxima_prob &&
     probDC >= filtros.confianca_maxima_prob &&
@@ -76,6 +83,8 @@ export function avaliarPerna({ jogo, mercado, odd, probH, probDC, probPush, amos
     ev_pct: (ev - 1) * 100,
     confianca: maxima ? CONFIANCA.MAXIMA : CONFIANCA.APROVADA,
     dixon_coles_disponivel: temDC,
+    amostra_curta: amostraCurta,
+    badge_amostra: amostraCurta ? `amostra curta no mando (${amostraMando} jogos)` : null,
     justificativa: montarJustificativa({ mercado, probFinal, ev, temDC, amostraMando, jogo }),
     elegivel_bilhete: !MERCADOS_AH.includes(mercado) && filtros.mercados_em_bilhete.includes(mercado),
   };

@@ -18,6 +18,7 @@ import { probHeuristica } from '../_shared/heuristica.js';
 import { matrizPlacares, mercadosDaMatriz } from '../_shared/dixonColes.js';
 import { avaliarPerna } from '../_shared/filtros.js';
 import { montarBilhetes, cardsHandicap } from '../_shared/montador.js';
+import { contagensDoJogo } from '../_shared/narrativa.js';
 import {
   temChaves, gerarDemo, buscarJogosDoDia, buscarHistoricoTime,
   buscarOddsDosJogos, cota, limitacoesPlano,
@@ -239,7 +240,10 @@ Deno.serve(async (req) => {
         dixon_coles_por_liga: Object.fromEntries(
           Object.entries(dcPorLiga).map(([l, m]: any) => [l, { disponivel: m.disponivel, motivo: m.motivo ?? null, n_jogos: m.n_jogos ?? 0 }]),
         ),
-        jogos, pernas, radar,
+        // Contagens por jogo: e o que vira frase de apostador na aba Analises
+        // ("nao perde em casa ha 9 de 10"), sem o dash precisar do historico inteiro.
+        jogos: jogos.map((j: any) => ({ ...j, contagens: contagensDoJogo(j, historico) })),
+        pernas, radar,
         bilhetes: resultado.bilhetes ?? [],
         sem_bilhete: resultado.sem_bilhete ? { motivo: resultado.motivo } : null,
         exposicao: resultado.exposicao ?? null,

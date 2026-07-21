@@ -22,6 +22,7 @@ export interface Perna {
   prob_heuristica: number | null; prob_dixon_coles: number | null; prob_final?: number;
   ev?: number; ev_pct?: number; amostra_mando: number;
   aprovada: boolean; motivo?: string; confianca?: string;
+  amostra_curta?: boolean; badge_amostra?: string | null;
   justificativa?: string; elegivel_bilhete?: boolean; dixon_coles_disponivel?: boolean;
 }
 
@@ -36,7 +37,7 @@ export interface Analise {
   data: string; modo: 'demo' | 'real'; gerado_em: string; banca_no_momento: number;
   resumo: { jogos: number; pernas_avaliadas: number; aprovadas: number; descartadas: number; bilhetes: number; sem_bilhete: boolean };
   dixon_coles_por_liga: Record<string, { disponivel: boolean; motivo: string | null; n_jogos: number }>;
-  jogos: { id: string; liga: string; hora: string; casa: string; fora: string }[];
+  jogos: { id: string; liga: string; hora: string; casa: string; fora: string; contagens?: unknown }[];
   pernas: Perna[]; bilhetes: Bilhete[];
   sem_bilhete: { motivo: string } | null;
   exposicao: { total_rs: number; pct_banca: number; teto_pct: number; teto_rs?: number } | null;
