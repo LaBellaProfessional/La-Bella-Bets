@@ -9,3 +9,7 @@ dist
 
 # Snapshots de dados de aposta — histórico financeiro não vai pro git.
 backup/
+
+# Harness de medicao de viewport — gerado, nao versionado.
+viewport.html
+src/_viewport.tsx

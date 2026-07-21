@@ -11,3 +11,18 @@ body { font-family: Inter, system-ui, -apple-system, sans-serif; -webkit-font-sm
 html, body { overflow-x: hidden; max-width: 100%; }
 #root { width: 100%; overflow-x: hidden; }
 body { overflow-wrap: break-word; }
+
+/* iOS Safari dá ZOOM AUTOMÁTICO ao focar input com fonte menor que 16px — e o zoom é o que
+   produz a rolagem lateral, mesmo com a página inteira medindo certo. Nenhuma medição de
+   layout pega isso: a página só fica larga DEPOIS do toque no campo. A aba Início tem dois
+   campos por entrada (oito no card de um jogo com quatro entradas), então bastava encostar
+   num deles. 16px é o limiar exato em que o iOS para de dar zoom.
+
+   O !important não é preguiça: `text-sm` é classe (especificidade 0,1,0) e vence qualquer
+   seletor de elemento (0,0,1). Sem ele a regra não aplica em campo nenhum — medi, eram 42
+   campos ainda em 14px. */
+@media (max-width: 640px) {
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea { font-size: 16px !important; }
+}

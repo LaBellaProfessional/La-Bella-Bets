@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { pct, rotuloMercado, type Analise, type Perna } from '../dados';
+import { pct, rotuloMercado, familiaDoMercado, NOME_FAMILIA, type Analise, type Familia, type Perna } from '../dados';
 import { Vazio } from './Inicio';
 
 /**
@@ -22,28 +22,64 @@ function traduzirMotivo(motivo: string): string {
   if (/abaixo da margem/i.test(motivo)) return 'A odd paga menos do que a chance real vale — aposta que empobrece devagar';
   if (/handicap sem Dixon/i.test(motivo)) return 'Handicap sem a matemática pronta pra essa liga — sem base, não entramos';
   if (/odd .* abaixo do mínimo/i.test(motivo)) return 'A odd é baixa demais pra compensar o risco';
+  if (/escanteios:.*abaixo do mínimo/i.test(motivo)) return 'Chance de escanteio não é convincente o bastante — e aqui não há odd de mercado pra conferir';
+  if (/escanteios:.*jogo\(s\) com estatística/i.test(motivo)) return 'Poucos jogos com estatística de escanteio coletada pra esses times';
   return motivo;
 }
+
+/**
+ * ORDEM DE LEITURA: aprovada, radar, reprovada.
+ *
+ * O que dá pra fazer hoje vem primeiro. Antes a lista saía na ordem em que o motor avaliou —
+ * e como a maioria é reprovada, a única entrada boa do jogo aparecia no fim, depois de dez
+ * linhas vermelhas.
+ */
+const ordemDaPerna = (p: Perna) => (p.aprovada && !p.radar ? 0 : p.radar ? 1 : 2);
 
 type Contagem = { n: number; venceu: number; empatou: number; perdeu: number; nao_perdeu: number; over15: number };
 type Contagens = { casa: { time: string; mando: Contagem; geral: Contagem }; fora: { time: string; mando: Contagem; geral: Contagem } };
 
 /* ── veredito do jogo em palavras ────────────────────────────────────────── */
+
+/** "resultado e gols", "escanteios", "resultado, gols e escanteios". */
+function listarFamilias(pernas: Perna[]): string {
+  const ORDEM: Familia[] = ['resultado', 'gols', 'escanteios'];
+  const nomes = ORDEM
+    .filter((f) => pernas.some((p) => familiaDoMercado(p.mercado) === f))
+    .map((f) => NOME_FAMILIA[f].toLowerCase());
+  if (nomes.length <= 1) return nomes[0] ?? '';
+  return `${nomes.slice(0, -1).join(', ')} e ${nomes[nomes.length - 1]}`;
+}
+
+/**
+ * O veredito TEM QUE NOMEAR ONDE ESTÁ O VALOR.
+ *
+ * Antes ele dizia "Tem valor na mesa, dá pra entrar" em verde no topo de uma lista onde tudo
+ * que aparecia estava reprovado — porque o valor estava em escanteios e escanteio nem era
+ * listado. Um verde genérico em cima de lista vermelha é pior do que não ter veredito: parece
+ * bug do sistema e destrói a confiança na tela. A família citada aqui sempre bate com as
+ * pernas aprovadas listadas abaixo.
+ */
 function vereditoDoJogo(pernas: Perna[]): { texto: string; cor: string } {
-  const comOdd = pernas.filter((p) => p.odd != null);
-  if (!comOdd.length) return { texto: 'Sem linha na casa, ignorado', cor: 'text-t3' };
+  if (!pernas.length) return { texto: 'Nada avaliado neste jogo', cor: 'text-t3' };
 
   const aprovadas = pernas.filter((p) => p.aprovada && !p.radar);
   const radar = pernas.filter((p) => p.radar);
-  const forte = aprovadas.find((p) => (p.prob_final ?? 0) >= 0.75);
 
-  if (forte) {
-    const lado = forte.mercado.includes('casa') ? 'o mandante' : forte.mercado.includes('fora') ? 'o visitante' : 'o jogo';
-    return { texto: `Cenário claro ${lado === 'o jogo' ? 'no placar' : `com ${lado}`}, vale olhar`, cor: 'text-verde' };
+  if (aprovadas.length) {
+    const forte = aprovadas.find((p) => (p.prob_final ?? 0) >= 0.75);
+    const detalhe = forte
+      ? ` · cenário claro em ${rotuloMercado(forte.mercado).toLowerCase()}`
+      : '';
+    return { texto: `Tem valor — ${listarFamilias(aprovadas)}${detalhe}`, cor: 'text-verde' };
   }
-  if (aprovadas.length) return { texto: 'Tem valor na mesa, dá pra entrar', cor: 'text-verde' };
-  if (radar.length) return { texto: 'Promissor, mas ainda cedo — esperar a véspera', cor: 'text-ambar' };
-  return { texto: 'Jogo equilibrado, sem valor', cor: 'text-t2' };
+  if (radar.length) {
+    return { texto: `Promissor em ${listarFamilias(radar)}, mas ainda cedo — esperar a véspera`, cor: 'text-ambar' };
+  }
+  if (!pernas.some((p) => p.odd != null || p.sem_odd_referencia)) {
+    return { texto: 'Sem linha na casa, ignorado', cor: 'text-t3' };
+  }
+  return { texto: 'Sem valor hoje', cor: 'text-t2' };
 }
 
 /* ── o porquê, com contagens ─────────────────────────────────────────────── */
@@ -74,17 +110,19 @@ function chipDoMercado(p: Perna): { icone: string; cor: string; texto: string } 
   const nome = rotuloMercado(p.mercado);
   const chance = p.prob_final != null ? ` modelo vê ${(p.prob_final * 100).toFixed(0)}%` : '';
   const justo = p.prob_final ? ` (justo seria @${(1 / p.prob_final).toFixed(2)})` : '';
+  // Escanteio não tem preço publicado: em vez de "@null", diz que a odd é você que traz.
+  const preco = p.odd != null ? ` @${p.odd}` : p.sem_odd_referencia ? ' (sem odd de mercado)' : '';
 
   if (p.radar) {
     return { icone: '🟡', cor: 'border-ambar/40 bg-ambar/5 text-ambar',
-      texto: `NO RADAR — ${nome} @${p.odd}, esperar véspera` };
+      texto: `NO RADAR — ${nome}${preco}, esperar véspera` };
   }
   if (p.aprovada) {
     return { icone: '✅', cor: 'border-verde/40 bg-verde/5 text-verde',
-      texto: `APROVADA — ${nome} @${p.odd},${chance}${justo}` };
+      texto: `APROVADA — ${nome}${preco},${chance}${justo}` };
   }
   return { icone: '❌', cor: 'border-borda bg-fundo text-t3',
-    texto: `REPROVADA — ${nome}${p.odd ? ` @${p.odd}` : ''}: ${traduzirMotivo(p.motivo ?? '')}` };
+    texto: `REPROVADA — ${nome}${preco}: ${traduzirMotivo(p.motivo ?? '')}` };
 }
 
 export function Analises({ analise }: { analise: Analise | null }) {
@@ -97,9 +135,16 @@ export function Analises({ analise }: { analise: Analise | null }) {
   const jogos = analise.jogos ?? [];
   const pernas = analise.pernas ?? [];
 
-  const porJogo = jogos.map((j) => ({ jogo: j, pernas: pernas.filter((p) => p.jogo_id === j.id) }));
-  const comLinha = porJogo.filter(({ pernas: ps }) => ps.some((p) => p.odd != null));
-  const semLinha = porJogo.filter(({ pernas: ps }) => !ps.some((p) => p.odd != null));
+  // "Tem o que mostrar" = a casa abriu linha OU o modelo tem veredito próprio (escanteios).
+  // Usar só `odd != null` jogava jogo com escanteio aprovado pro balde de "ignorados" — e o
+  // card do jogo escondia a única entrada boa que ele tinha.
+  const temConteudo = (p: Perna) => p.odd != null || Boolean(p.sem_odd_referencia);
+  const porJogo = jogos.map((j) => ({
+    jogo: j,
+    pernas: pernas.filter((p) => p.jogo_id === j.id).sort((a, b) => ordemDaPerna(a) - ordemDaPerna(b)),
+  }));
+  const comLinha = porJogo.filter(({ pernas: ps }) => ps.some(temConteudo));
+  const semLinha = porJogo.filter(({ pernas: ps }) => !ps.some(temConteudo));
   const valeram = comLinha.filter(({ pernas: ps }) => ps.some((p) => p.aprovada));
 
   // Resumo do dia em uma frase — a leitura de 3 segundos.
@@ -132,7 +177,7 @@ export function Analises({ analise }: { analise: Analise | null }) {
             </div>
 
             <div className="space-y-2 p-4">
-              {ps.filter((p) => p.odd != null).map((p, i) => {
+              {ps.filter(temConteudo).map((p, i) => {
                 const chip = chipDoMercado(p);
                 return (
                   <div key={i} className={`rounded-lg border px-3 py-2 text-xs leading-relaxed ${chip.cor}`}>

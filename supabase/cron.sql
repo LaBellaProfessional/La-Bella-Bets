@@ -37,3 +37,15 @@ select cron.schedule(
 );
 
 select jobid, jobname, schedule, active from cron.job order by jobname;
+
+-- 21/07: coleta semanal de escanteios, domingo 10:30 UTC (07:30 SP), meia hora antes do
+-- refit do Dixon-Coles. Uma invocação com lote 60 cobre a semana com folga: as 3 ligas somam
+-- ~30 jogos novos por rodada, e a function é idempotente (jogo já coletado não volta a ser
+-- buscado). O bootstrap inicial de 446 jogos foi feito manualmente.
+select cron.schedule('bella-bets-escanteios-semanal', '30 10 * * 0', $$
+  select net.http_post(
+    url:='https://wsbhfljopcdynwnoioxx.supabase.co/functions/v1/bootstrap-escanteios',
+    headers:=jsonb_build_object('Content-Type','application/json','Authorization','Bearer '||
+      (select decrypted_secret from vault.decrypted_secrets where name='bella_service_key')),
+    body:=jsonb_build_object('ligas',jsonb_build_array(72,71,98),'por_liga',150,'lote',60,'disparo','cron'));
+$$);

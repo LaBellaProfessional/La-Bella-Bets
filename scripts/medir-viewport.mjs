@@ -43,7 +43,9 @@ const CAMINHOS_CHROME = [
 const URL_ALVO = process.argv[2];
 const LARGURA = Number(process.argv[3] ?? 390);
 const ALTURA = Number(process.argv[4] ?? 844);
-const PORTA = 9333;
+// Porta derivada do PID: rodar duas medições seguidas não esbarra numa instância anterior
+// do Chrome que ainda não morreu — foi o que quebrou a bateria de 320/390/430px.
+const PORTA = Number(process.env.CDP_PORT ?? 9300 + (process.pid % 90));
 
 if (!URL_ALVO) {
   console.error('uso: node scripts/medir-viewport.mjs <url> [largura=390] [altura=844]');
@@ -118,12 +120,25 @@ const DETECTOR = `(() => {
     }
   }
 
+  // (3) Campos que fazem o iOS dar ZOOM ao focar. Abaixo de 16px o Safari amplia a página
+  // sozinho, e o zoom vira rolagem lateral — DEPOIS do toque, então nenhuma medição de
+  // layout estático pega. É uma armadilha invisível em qualquer medição de desktop.
+  const zoomIOS = [];
+  if (limite <= 640) {
+    for (const campo of document.querySelectorAll('input, select, textarea')) {
+      if (campo.type === 'checkbox' || campo.type === 'radio') continue;
+      const fs = parseFloat(getComputedStyle(campo).fontSize);
+      if (fs < 16) zoomIOS.push({ elemento: nome(campo), fontSize: fs });
+    }
+  }
+
   return JSON.stringify({
     clientWidth: limite,
     scrollWidth: document.documentElement.scrollWidth,
     rolaLateral: document.documentElement.scrollWidth > limite,
     culpados: fora.map(({ el, ...r }) => r),
     containersRolantes: rolantes,
+    camposComZoomIOS: zoomIOS,
   }, null, 1);
 })()`;
 
@@ -157,12 +172,15 @@ chrome.kill();
 let problema = false;
 try {
   const j = JSON.parse(bruto);
-  problema = j.rolaLateral || j.culpados.length > 0 || j.containersRolantes.length > 0;
+  const zoom = j.camposComZoomIOS ?? [];
+  problema = j.rolaLateral || j.culpados.length > 0 || j.containersRolantes.length > 0 || zoom.length > 0;
   if (problema) {
     console.error(`\n✗ ${LARGURA}px: ${j.culpados.length} elemento(s) estourando, ` +
-      `${j.containersRolantes.length} container(es) rolando na horizontal.`);
+      `${j.containersRolantes.length} container(es) rolando na horizontal, ` +
+      `${zoom.length} campo(s) que dão zoom no iOS.`);
   } else {
-    console.error(`\n✓ ${LARGURA}px: nada estoura a largura e nada rola na horizontal.`);
+    console.error(`\n✓ ${LARGURA}px: nada estoura a largura, nada rola na horizontal, ` +
+      `nenhum campo dispara zoom no iOS.`);
   }
 } catch { problema = true; }
 process.exit(problema ? 1 : 0);
