@@ -11,18 +11,19 @@ export function Analises({ analise }: { analise: Analise | null }) {
   const [verDescartadas, setVerDescartadas] = useState(true);
   if (!analise) return <Vazio titulo="Nada analisado nesta data">Rode o motor para esta data.</Vazio>;
 
-  const porJogo = analise.jogos.map((j) => ({
+  const resumo = analise.resumo ?? { jogos: 0, aprovadas: 0, descartadas: 0 } as Analise["resumo"];
+  const porJogo = (analise.jogos ?? []).map((j) => ({
     jogo: j,
-    pernas: analise.pernas.filter((p) => p.jogo_id === j.id),
+    pernas: (analise.pernas ?? []).filter((p) => p.jogo_id === j.id),
   }));
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-borda bg-card px-4 py-3 text-sm">
         <span className="text-t2">
-          <b className="text-t1">{analise.resumo.jogos}</b> jogos ·{' '}
-          <b className="text-verde">{analise.resumo.aprovadas}</b> pernas aprovadas ·{' '}
-          <b className="text-t3">{analise.resumo.descartadas}</b> descartadas
+          <b className="text-t1">{resumo.jogos}</b> jogos ·{' '}
+          <b className="text-verde">{resumo.aprovadas}</b> pernas aprovadas ·{' '}
+          <b className="text-t3">{resumo.descartadas}</b> descartadas
         </span>
         <label className="flex cursor-pointer items-center gap-2 text-xs text-t2">
           <input type="checkbox" checked={verDescartadas} onChange={(e) => setVerDescartadas(e.target.checked)} />
@@ -42,7 +43,7 @@ export function Analises({ analise }: { analise: Analise | null }) {
       <div className="rounded-lg border border-borda bg-card p-3">
         <div className="mb-2 text-[10px] uppercase tracking-widest text-t3">Dixon-Coles por liga</div>
         <div className="flex flex-wrap gap-2">
-          {Object.entries(analise.dixon_coles_por_liga).map(([liga, m]) => (
+          {Object.entries(analise.dixon_coles_por_liga ?? {}).map(([liga, m]) => (
             <span key={liga}
               className={`rounded px-2 py-1 text-xs ${m.disponivel ? 'bg-verde/10 text-verde' : 'bg-ambar/10 text-ambar'}`}
               title={m.motivo ?? ''}>

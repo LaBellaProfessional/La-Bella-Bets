@@ -48,7 +48,11 @@ function Dash() {
   const qDatas = useDatas();
   const config = qConfig.data;
   const datas = qDatas.data;
-  const data = dataSel ?? datas?.[0] ?? null;
+  // A aba chama-se Hoje: tem que abrir em HOJE, nao na data mais recente da lista (que hoje
+  // e D+3 por causa da janela). So cai pra mais recente se ainda nao existir analise de hoje.
+  const hojeISO = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }))
+    .toISOString().slice(0, 10);
+  const data = dataSel ?? (datas?.includes(hojeISO) ? hojeISO : datas?.[0]) ?? null;
   const qAnalise = useAnalise(data);
   const analise = qAnalise.data;
   const { data: bilhetes } = useBilhetes();

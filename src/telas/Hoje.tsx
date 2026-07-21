@@ -27,7 +27,10 @@ export function Hoje({
     );
   }
 
-  const semBilhete = analise.sem_bilhete || !analise.bilhetes.length;
+  // Defensivo: payload sem um campo nao pode derrubar a tela inteira.
+  const resumo = analise.resumo ?? { jogos: 0, pernas_avaliadas: 0, aprovadas: 0, descartadas: 0, bilhetes: 0, sem_bilhete: true };
+  const bilhetes = analise.bilhetes ?? [];
+  const semBilhete = analise.sem_bilhete || !bilhetes.length;
 
   return (
     <div className="space-y-4">
@@ -42,8 +45,8 @@ export function Hoje({
           <div className="text-3xl font-bold tracking-tight text-t1">SEM BILHETE HOJE</div>
           <p className="mx-auto mt-3 max-w-md text-sm text-t2">{analise.sem_bilhete?.motivo}</p>
           <p className="mt-4 text-xs text-t3">
-            {analise.resumo.jogos} jogos e {analise.resumo.pernas_avaliadas} pernas analisadas ·{' '}
-            {analise.resumo.aprovadas} passaram nos filtros. Não ter bilhete é resultado válido —
+            {resumo.jogos} jogos e {resumo.pernas_avaliadas} pernas analisadas ·{' '}
+            {resumo.aprovadas} passaram nos filtros. Não ter bilhete é resultado válido —
             veja em <b>Análises</b> o motivo de cada descarte.
           </p>
         </div>
@@ -59,7 +62,7 @@ export function Hoje({
               </span>
             </div>
           )}
-          {analise.bilhetes.map((b) => (
+          {bilhetes.map((b) => (
             <CardBilhete
               key={b.ordem}
               bilhete={b}

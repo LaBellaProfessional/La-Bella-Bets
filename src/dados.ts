@@ -92,9 +92,13 @@ export function useAnalise(data: string | null) {
     queryKey: ['analise', data],
     enabled: Boolean(data),
     queryFn: async () => {
-      const { data: row, error } = await supabase.from('analises').select('payload').eq('data', data).maybeSingle();
+      const { data: row, error } = await supabase.from('analises').select('payload,resumo').eq('data', data).maybeSingle();
       if (error) throw error;
-      return (row?.payload ?? null) as Analise | null;
+      if (!row?.payload) return null;
+      // Blindagem: analises gravadas antes do fix nao tinham 'resumo' dentro do payload —
+      // so na coluna. Costurar aqui evita depender de todo payload historico estar perfeito.
+      const p = row.payload as Analise;
+      return { ...p, resumo: p.resumo ?? (row.resumo as Analise['resumo']) } as Analise;
     },
   });
 }

@@ -231,6 +231,10 @@ Deno.serve(async (req) => {
       const payload = {
         data: dataAlvo, modo, gerado_em: new Date().toISOString(), banca_no_momento: cfg.banca,
         horizonte_dias: horizonte,
+        // resumo vai TAMBEM aqui dentro, nao so na coluna: o dash le o payload inteiro e
+        // esperava este campo. Gravar so na coluna deixava analise.resumo undefined no front
+        // e derrubava a tela Hoje ("can t access property jogos").
+        resumo,
         config_efetivo: { filtros: cfg.filtros, pesos_heuristica: cfg.pesos_heuristica, dixon_coles: cfg.dixon_coles },
         dixon_coles_por_liga: Object.fromEntries(
           Object.entries(dcPorLiga).map(([l, m]: any) => [l, { disponivel: m.disponivel, motivo: m.motivo ?? null, n_jogos: m.n_jogos ?? 0 }]),
