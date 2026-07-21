@@ -25,6 +25,11 @@ export default function App() {
   const [carregandoSessao, setCarregando] = useState(true);
 
   useEffect(() => {
+    // Sinal POSITIVO de que o app montou. A guarda de boot no index.html so age se
+    // esta flag nao existir — heuristica de "#root esta vazio" nao distingue "nunca montou"
+    // de "montou e o React desmontou por um erro", e foi isso que gerou o loop de reload.
+    (window as unknown as { __BELLA_MOUNTED?: boolean }).__BELLA_MOUNTED = true;
+
     supabase.auth.getSession().then(({ data }) => { setSessao(data.session); setCarregando(false); });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => setSessao(s));
     return () => sub.subscription.unsubscribe();

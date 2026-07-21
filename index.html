@@ -14,18 +14,29 @@
     <script type="module" src="/src/main.tsx"></script>
 
     <!--
-      GUARDA DE BOOT.
-      O que aconteceu em 21/07: o Safari do iPhone reusou um index.html antigo do cache, que
-      apontava pro JS de um deploy anterior. Esse arquivo já não existe no CDN (404), o módulo
-      nunca carrega e a tela fica PRETA e muda — sem erro, sem pista.
-      Aqui: detecta o boot que não aconteceu, recarrega UMA vez furando o cache e, se ainda
-      assim falhar, mostra o motivo na tela em vez de deixar o usuário no escuro.
+      GUARDA DE BOOT — só cuida do que acontece ANTES do app montar.
+
+      A primeira versão usava heurística de DOM ("#root está vazio = não montou") e isso deu
+      falso negativo: quando o React quebra num render ele DESMONTA a árvore, o #root fica
+      vazio de novo, e a guarda concluía "não montou", recarregava e cobria um app que estava
+      funcionando. Loop de reload com ?v= na URL.
+
+      Agora a detecção é POSITIVA: o App marca window.__BELLA_MOUNTED no primeiro efeito.
+      A guarda só age se essa flag NÃO existir — não há como confundir "nunca montou" com
+      "montou e quebrou depois". Erro depois do mount é responsabilidade do ErroBoundary.
     -->
     <script>
       (function () {
         var CHAVE = 'bella-boot-retry';
 
+        function montou() {
+          return window.__BELLA_MOUNTED === true;
+        }
+
         function mostrarFalha(motivo) {
+          // Trava dupla: se o app montou, a guarda não escreve NADA na tela. Foi exatamente
+          // isso que faltou na primeira versão.
+          if (montou()) return;
           var raiz = document.getElementById('root');
           if (!raiz || raiz.innerHTML) return;
 
@@ -55,6 +66,7 @@
         }
 
         function falhou(motivo) {
+          if (montou()) return;
           var jaTentou;
           try { jaTentou = sessionStorage.getItem(CHAVE); } catch (e) { jaTentou = '1'; }
           if (!jaTentou) {
@@ -65,29 +77,29 @@
           mostrarFalha(motivo);
         }
 
-        // Arquivo do app que não baixou (o caso do 404 acima).
+        // Arquivo DO APP que não baixou (o caso do 404 de asset em cache velho). Restrito a
+        // /assets/ de propósito: favicon, fonte ou imagem que falhe não é motivo pra recarregar.
         window.addEventListener('error', function (e) {
+          if (montou()) return;
           var alvo = e.target;
-          if (alvo && (alvo.tagName === 'SCRIPT' || alvo.tagName === 'LINK')) {
-            falhou('Um arquivo do app não foi encontrado — provavelmente uma versão antiga em cache.');
-          }
+          if (!alvo || (alvo.tagName !== 'SCRIPT' && alvo.tagName !== 'LINK')) return;
+          var url = alvo.src || alvo.href || '';
+          if (url.indexOf('/assets/') === -1) return;
+          falhou('Um arquivo do app não foi encontrado — provavelmente uma versão antiga em cache.');
         }, true);
 
-        // Rede lenta ou erro de execução: se nada montou, também é tela preta.
+        // Rede lenta ou módulo que nunca executou. 10s: o bundle tem ~460KB e 3G ruim demora.
         setTimeout(function () {
-          var raiz = document.getElementById('root');
-          if (raiz && !raiz.innerHTML) falhou('O app não iniciou a tempo.');
-        }, 6000);
+          if (montou()) return;
+          falhou('O app não iniciou a tempo.');
+        }, 10000);
 
-        // Montou: limpa a marca para a próxima falha poder tentar de novo.
-        window.addEventListener('load', function () {
-          setTimeout(function () {
-            var raiz = document.getElementById('root');
-            if (raiz && raiz.innerHTML) {
-              try { sessionStorage.removeItem(CHAVE); } catch (e) { /* ignora */ }
-            }
-          }, 1000);
-        });
+        // Montou de fato: limpa a marca para uma falha futura poder tentar de novo.
+        var conferirMontagem = setInterval(function () {
+          if (!montou()) return;
+          clearInterval(conferirMontagem);
+          try { sessionStorage.removeItem(CHAVE); } catch (e) { /* ignora */ }
+        }, 500);
       })();
     </script>
   </body>
