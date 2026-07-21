@@ -22,7 +22,7 @@ export interface Perna {
   prob_heuristica: number | null; prob_dixon_coles: number | null; prob_final?: number;
   ev?: number; ev_pct?: number; amostra_mando: number;
   aprovada: boolean; motivo?: string; confianca?: string;
-  amostra_curta?: boolean; badge_amostra?: string | null;
+  amostra_curta?: boolean; badge_amostra?: string | null; casa_odd?: string | null;
   justificativa?: string; elegivel_bilhete?: boolean; dixon_coles_disponivel?: boolean;
 }
 
@@ -51,13 +51,14 @@ export interface Analise {
 export interface Registro {
   id: string; data: string; registrado_em: string;
   pernas: { partida: string; mercado: string; odd: number }[];
-  odd_total: number; prob_combinada: number; ev_pct: number;
+  odd_total: number; odd_referencia?: number | null; casa_odd?: string | null; prob_combinada: number; ev_pct: number;
   stake_real: number; resultado: 'pendente' | 'ganhou' | 'perdeu';
   retorno_rs: number; banca_depois: number | null;
 }
 
 export interface Config {
-  id: number; banca: number; stake_padrao_pct: number; stake_confianca_maxima_pct: number;
+  banca: number;
+  id: number; stake_padrao_pct: number; stake_confianca_maxima_pct: number;
   teto_exposicao_diaria_pct: number;
   filtros: Record<string, number>;
   ligas: { id: number; nome: string; pais: string; ativa: boolean }[];
@@ -208,5 +209,52 @@ export function useJanela(dataBase: string | null) {
       if (error) throw error;
       return (data ?? []).map((r) => r.payload as Analise);
     },
+  });
+}
+
+/** Janela inteira a partir de hoje (SP): alimenta a aba Inicio, agrupada por dia. */
+export function useJanelaCompleta(hoje: string) {
+  return useQuery<Analise[]>({
+    queryKey: ['janela-completa', hoje],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('analises').select('payload,resumo')
+        .gte('data', hoje).order('data', { ascending: true }).limit(5);
+      if (error) throw error;
+      return (data ?? []).map((r) => {
+        const p = r.payload as Analise;
+        return { ...p, resumo: p.resumo ?? (r.resumo as Analise['resumo']) };
+      });
+    },
+  });
+}
+
+/** Registra a entrada com a odd REAL digitada; a odd do modelo fica como referencia (CLV). */
+export function useRegistrarEntrada() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (e: {
+      data: string; pernas: Perna[]; odd_real: number; odd_referencia: number;
+      prob: number; stake: number; casa_odd: string | null;
+    }) => {
+      const { error } = await supabase.from('bilhetes').insert({
+        data: e.data,
+        pernas: e.pernas.map((p) => ({ partida: p.partida, mercado: p.mercado, odd: p.odd })),
+        n_pernas: e.pernas.length,
+        odd_total: e.odd_real,             // a odd REAL da aposta
+        odd_referencia: e.odd_referencia,  // a que o modelo viu — a diferenca e o CLV
+        casa_odd: e.casa_odd,
+        prob_combinada: e.prob,
+        ev_pct: (e.prob * e.odd_real - 1) * 100,
+        stake_sugerido: e.stake,
+        stake_real: e.stake,
+        ligas: [...new Set(e.pernas.map((p) => p.liga))],
+        mercados: [...new Set(e.pernas.map((p) => p.mercado))],
+        faixa_odd: e.odd_real < 1.5 ? '1.40-1.50' : e.odd_real < 1.6 ? '1.50-1.60' : '1.60+',
+        confianca: e.pernas.every((p) => p.confianca === 'CONFIANCA_MAXIMA') ? 'maxima' : 'aprovada',
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bilhetes'] }),
   });
 }

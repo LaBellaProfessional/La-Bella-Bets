@@ -4,17 +4,16 @@ import { supabase } from './supabase';
 import { Login } from './Login';
 import {
   useConfig, useDatas, useAnalise, useBilhetes,
-  useRegistrarBilhete, useDefinirResultado, useSalvarConfig, useRodarMotor, useJanela,
-  type Bilhete,
+  useDefinirResultado, useSalvarConfig, useRodarMotor, useJanelaCompleta, useRegistrarEntrada,
 } from './dados';
-import { Hoje } from './telas/Hoje';
+import { Inicio } from './telas/Inicio';
 import { Analises } from './telas/Analises';
 import { Historico } from './telas/Historico';
 import { Configuracoes } from './telas/Configuracoes';
 
-type Aba = 'hoje' | 'analises' | 'historico' | 'config';
+type Aba = 'inicio' | 'analises' | 'historico' | 'config';
 const ABAS: { id: Aba; nome: string }[] = [
-  { id: 'hoje', nome: 'Hoje' },
+  { id: 'inicio', nome: 'Início' },
   { id: 'analises', nome: 'Análises' },
   { id: 'historico', nome: 'Histórico' },
   { id: 'config', nome: 'Config' },
@@ -41,7 +40,7 @@ export default function App() {
 }
 
 function Dash() {
-  const [aba, setAba] = useState<Aba>('hoje');
+  const [aba, setAba] = useState<Aba>('inicio');
   const [dataSel, setDataSel] = useState<string | null>(null);
 
   const qConfig = useConfig();
@@ -56,13 +55,14 @@ function Dash() {
   const qAnalise = useAnalise(data);
   const analise = qAnalise.data;
   const { data: bilhetes } = useBilhetes();
-  const { data: janela } = useJanela(data);
+  const qJanela = useJanelaCompleta(hojeISO);
+  const janela = qJanela.data;
 
   // Falha de consulta NAO pode virar tela vazia: sem isso, 'sem dado' e 'sem conexao'
   // ficam iguais na tela e o diagnostico vira advinhacao.
   const erroQuery = qConfig.error ?? qDatas.error ?? qAnalise.error;
 
-  const registrar = useRegistrarBilhete();
+  const registrar = useRegistrarEntrada();
   const definirResultado = useDefinirResultado();
   const salvarConfig = useSalvarConfig();
   const motor = useRodarMotor();
@@ -132,16 +132,14 @@ function Dash() {
             <b>Falha ao carregar dados.</b> {(erroQuery as Error).message}
           </div>
         )}
-        {aba === 'hoje' && (
-          <Hoje
-            analise={analise ?? null}
-            carregando={qAnalise.isLoading}
-            data={data}
-            onAnalisar={() => rodar('analisar', { data })}
+        {aba === 'inicio' && (
+          <Inicio
             janela={janela ?? []}
-            jaRegistrados={(bilhetes ?? []).map((b) => ({ ...b, stake_rs: b.stake_real })) as never}
-            onRegistrar={(b: Bilhete, valor: number) =>
-              data && registrar.mutate({ bilhete: b, data, valor })}
+            config={config}
+            carregando={qJanela.isLoading}
+            jaRegistrados={bilhetes ?? []}
+            onRegistrar={(e) => registrar.mutate(e)}
+            onAnalisar={() => rodar('analisar')}
           />
         )}
         {aba === 'analises' && <Analises analise={analise ?? null} />}

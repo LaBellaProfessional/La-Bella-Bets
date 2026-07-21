@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { pct, ROTULO, type Analise, type Perna } from '../dados';
-import { Vazio } from './Hoje';
+import { Vazio } from './Inicio';
 
 /**
  * ABA ANÁLISES — LINGUAGEM DE APOSTADOR.

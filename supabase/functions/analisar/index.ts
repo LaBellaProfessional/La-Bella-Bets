@@ -43,8 +43,8 @@ const json = (corpo: unknown, status = 200) =>
 
 
 const hojeSP = () =>
-  new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
-    .toISOString().slice(0, 10);
+  new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' })
+    .format(new Date());
 
 const somarDias = (iso: string, n: number) => {
   const d = new Date(iso + 'T12:00:00Z');
@@ -120,7 +120,19 @@ Deno.serve(async (req) => {
       };
       jogosPorLiga = Object.fromEntries((ligasCache ?? []).map((l) => [l.nome, l.jogos ?? []]));
 
-      for (const d of datas) jogosPorData[d] = await buscarJogosDoDia(ligasAtivas, d);
+      // Busca por dia UTC, agrupa por dia de SAO PAULO. Um dia SP comeca as 03:00 UTC, entao
+      // pra cobrir a janela inteira precisamos de um dia UTC a mais no fim.
+      const diasUTC = [...datas, somarDias(base, nDias)];
+      const brutos: any[] = [];
+      for (const d of diasUTC) brutos.push(...await buscarJogosDoDia(ligasAtivas, d));
+      const vistosId = new Set<string>();
+      for (const d of datas) jogosPorData[d] = [];
+      for (const j of brutos) {
+        if (vistosId.has(j.id)) continue;
+        vistosId.add(j.id);
+        if (jogosPorData[j.data]) jogosPorData[j.data].push(j);   // j.data ja e o dia SP
+      }
+      for (const d of datas) jogosPorData[d].sort((a, b) => (a.inicio ?? '').localeCompare(b.inicio ?? ''));
 
       const todosJogos = datas.flatMap((d) => jogosPorData[d]);
       for (const j of todosJogos) {
@@ -131,7 +143,7 @@ Deno.serve(async (req) => {
 
       // ── 2. Odds da janela INTEIRA numa tacada: a API devolve os próximos dias na mesma
       // resposta, então agrupar por liga (não por dia) é o que mantém o custo igual ao de antes.
-      const res = await buscarOddsDosJogos(todosJogos);
+      const res = await buscarOddsDosJogos(todosJogos, (cfg.filtros as any).casa_preferida ?? null);
       odds = res.odds;
       avisos.push(...res.diagnostico);
       if (limitacoesPlano.size) avisos.push(...[...limitacoesPlano]);
@@ -198,6 +210,7 @@ Deno.serve(async (req) => {
           // margem dobra. Não reprova a perna — segura no radar até a véspera, quando a
           // informação melhora e o EV é reavaliado com o time provável já conhecido.
           p.horizonte_dias = horizonte;
+          p.casa_odd = odds[jogo.id]?._casas?.[mercado] ?? null;   // de qual bookmaker veio
           if (p.aprovada && horizonte > 0 && (p.ev ?? 0) < evAntecipado) {
             p.elegivel_bilhete = false;
             p.radar = true;

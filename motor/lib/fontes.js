@@ -13,6 +13,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const API_FOOTBALL = 'https://v3.football.api-sports.io';
+
+/**
+ * FUSO: a API entrega tudo em UTC e o Maikon vive em Sao Paulo. Um jogo as 00:35 UTC de 22/07
+ * e 21:35 de HOJE (21/07) pra ele. Agrupar por dia UTC jogava jogo de hoje pro dia seguinte.
+ * Todo dia e hora exibidos passam por aqui.
+ */
+export const TZ = 'America/Sao_Paulo';
+export const dataSP = (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+export const horaSP = (iso) => new Intl.DateTimeFormat('pt-BR', { timeZone: TZ, hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 const ODDS_API = 'https://api.the-odds-api.com/v4';
 
 /** Aceita os dois nomes de variável (API_FOOTBALL_KEY e APIFOOTBALL_KEY). */
@@ -68,8 +77,8 @@ export async function buscarJogosDoDia(ligasAtivas, data) {
       id: String(f.fixture.id),
       liga: liga.nome,
       liga_id: liga.id,
-      data,
-      hora: new Date(f.fixture.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      data: dataSP(f.fixture.date),   // dia de Sao Paulo, nao o dia UTC da consulta
+      hora: horaSP(f.fixture.date),
       casa: f.teams.home.name,
       fora: f.teams.away.name,
       // Sem os ids não dá pra buscar histórico — era o furo do caminho real.
@@ -205,20 +214,30 @@ function contido(a, b) {
   return [...menor].every((t) => maior.has(t));
 }
 
-/** Melhor odd (maior) entre as casas, por mercado. */
-function melhorOdd(bookmakers, mercadoKey, nomeResultado, ponto) {
-  let melhor = null;
+/**
+ * Melhor odd entre as casas, com a CASA de origem.
+ *
+ * A dispersao entre casas e grande (medido 21/07: 1.41 na melhor x 1.27 na pior no mesmo
+ * mercado, 11%). Guardar de qual casa veio deixa claro se a odd exibida e alcancavel — e e o
+ * que permite comparar depois com a odd real que o Maikon pegou (CLV).
+ *
+ * casaPreferida: se informada e existir cotacao dela, ela ganha; senao cai na melhor do mercado.
+ */
+function melhorOdd(bookmakers, mercadoKey, nomeResultado, ponto, casaPreferida) {
+  let melhor = null, casaMelhor = null, daPreferida = null;
   for (const bk of bookmakers ?? []) {
     for (const mk of bk.markets ?? []) {
       if (mk.key !== mercadoKey) continue;
       for (const o of mk.outcomes ?? []) {
         if (ponto != null && Number(o.point) !== ponto) continue;
         if (!mesmoTime(o.name, nomeResultado) && o.name !== nomeResultado) continue;
-        if (melhor == null || o.price > melhor) melhor = o.price;
+        if (casaPreferida && bk.key === casaPreferida) daPreferida = { odd: o.price, casa: bk.title };
+        if (melhor == null || o.price > melhor) { melhor = o.price; casaMelhor = bk.title; }
       }
     }
   }
-  return melhor;
+  if (daPreferida) return daPreferida;
+  return melhor == null ? null : { odd: melhor, casa: casaMelhor };
 }
 
 /**
@@ -226,7 +245,7 @@ function melhorOdd(bookmakers, mercadoKey, nomeResultado, ponto) {
  * Dupla chance não é oferecida direto: deriva do 1X2 removendo o overround
  * (DC = 1 / (p_norm_a + p_norm_b)). É a conversão padrão.
  */
-export async function buscarOddsDosJogos(jogos) {
+export async function buscarOddsDosJogos(jogos, casaPreferida = null) {
   const porLiga = new Map();
   for (const j of jogos) {
     const key = SPORT_KEY_POR_LIGA[j.liga_id];
@@ -285,23 +304,28 @@ export async function buscarOddsDosJogos(jogos) {
       const ev = candidatos[0];
       if (!ev) { diagnostico.push(`sem odds: ${j.casa} x ${j.fora}`); continue; }
 
-      const oCasa = melhorOdd(ev.bookmakers, 'h2h', ev.home_team);
-      const oFora = melhorOdd(ev.bookmakers, 'h2h', ev.away_team);
-      const oEmp = melhorOdd(ev.bookmakers, 'h2h', 'Draw');
+      const oCasa = melhorOdd(ev.bookmakers, 'h2h', ev.home_team, null, casaPreferida);
+      const oFora = melhorOdd(ev.bookmakers, 'h2h', ev.away_team, null, casaPreferida);
+      const oEmp = melhorOdd(ev.bookmakers, 'h2h', 'Draw', null, casaPreferida);
+      const casasUsadas = {};
       const dc = (a, b) => {
         if (!a || !b) return null;
-        const soma = 1 / a + 1 / b;
+        const soma = 1 / a.odd + 1 / b.odd;
         return soma > 0 ? +(1 / soma).toFixed(2) : null;
       };
+      const val = (r, nome) => { if (r) casasUsadas[nome] = r.casa; return r ? r.odd : null; };
+      if (oCasa) casasUsadas.dupla_chance_casa = oCasa.casa;
+      if (oFora) casasUsadas.dupla_chance_fora = oFora.casa;
       odds[j.id] = {
         dupla_chance_casa: dc(oCasa, oEmp),
         dupla_chance_fora: dc(oFora, oEmp),
-        over_05: melhorOdd(ev.bookmakers, 'totals', 'Over', 0.5),
-        over_15: melhorOdd(ev.bookmakers, 'totals', 'Over', 1.5),
-        under_45: melhorOdd(ev.bookmakers, 'totals', 'Under', 4.5),
+        over_05: val(melhorOdd(ev.bookmakers, 'totals', 'Over', 0.5, casaPreferida), 'over_05'),
+        over_15: val(melhorOdd(ev.bookmakers, 'totals', 'Over', 1.5, casaPreferida), 'over_15'),
+        under_45: val(melhorOdd(ev.bookmakers, 'totals', 'Under', 4.5, casaPreferida), 'under_45'),
         // Handicap asiático não vem no tier gratuito: fica null e a perna é descartada
         // com "sem odd" — honesto, em vez de inventar preço.
         ah_casa_m05: null, ah_casa_m10: null, ah_fora_p05: null,
+        _casas: casasUsadas,
       };
     }
   }
