@@ -152,6 +152,9 @@ function gravarAnalise({ modo, jogos, pernas, resultado, cardsAH, dc }) {
     modo,
     gerado_em: new Date().toISOString(),
     banca_no_momento: cfg.banca,
+    // Uma análise só é interpretável junto dos parâmetros que a produziram: mudar a faixa de
+    // odd ou o EV mínimo muda o veredito do mesmo jogo. Fica gravado com o resultado.
+    config_efetivo: { filtros: cfg.filtros, pesos_heuristica: cfg.pesos_heuristica, dixon_coles: cfg.dixon_coles },
     resumo: {
       jogos: jogos.length,
       pernas_avaliadas: pernas.length,
