@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { supabase, invocar } from './supabase';
 
 export const ROTULO: Record<string, string> = {
   dupla_chance_casa: 'DC casa (1X)',
@@ -35,55 +36,148 @@ export interface Analise {
   pernas: Perna[]; bilhetes: Bilhete[];
   sem_bilhete: { motivo: string } | null;
   exposicao: { total_rs: number; pct_banca: number; teto_pct: number; teto_rs?: number } | null;
-  config_efetivo?: { filtros: Record<string, number>; pesos_heuristica: unknown; dixon_coles: unknown };
+  config_efetivo?: { filtros: Record<string, number> };
   cards_handicap: (Perna & { vantagem_pp: number; stake_rs: number; observacao: string })[];
+  avisos?: string[];
 }
 
 export interface Registro {
   id: string; data: string; registrado_em: string;
   pernas: { partida: string; mercado: string; odd: number }[];
   odd_total: number; prob_combinada: number; ev_pct: number;
-  stake_rs: number; resultado: 'pendente' | 'ganhou' | 'perdeu';
+  stake_real: number; resultado: 'pendente' | 'ganhou' | 'perdeu';
   retorno_rs: number; banca_depois: number | null;
 }
 
 export interface Config {
-  banca: number; stake_padrao_pct: number; stake_confianca_maxima_pct: number;
+  id: number; banca: number; stake_padrao_pct: number; stake_confianca_maxima_pct: number;
   teto_exposicao_diaria_pct: number;
   filtros: Record<string, number>;
   ligas: { id: number; nome: string; pais: string; ativa: boolean }[];
 }
 
-interface Dados { config: Config; bilhetes: Registro[]; datas: string[]; analises: Record<string, Analise> }
+/* ─────────────────────────── QUERIES ─────────────────────────── */
 
-export function useDados() {
-  const [dados, setDados] = useState<Dados | null>(null);
-  const [erro, setErro] = useState<string | null>(null);
+export function useConfig() {
+  return useQuery<Config>({
+    queryKey: ['config'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('config').select('*').eq('id', 1).single();
+      if (error) throw error;
+      return data as Config;
+    },
+  });
+}
 
-  const carregar = useCallback(async () => {
-    try {
-      const r = await fetch('/api/dados');
-      if (!r.ok) throw new Error(`API ${r.status}`);
-      setDados(await r.json());
-      setErro(null);
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : 'falha ao carregar /data');
-    }
-  }, []);
+/** Datas com análise, mais recente primeiro. */
+export function useDatas() {
+  return useQuery<string[]>({
+    queryKey: ['datas'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('analises').select('data').order('data', { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((d) => d.data as string);
+    },
+  });
+}
 
-  useEffect(() => { void carregar(); }, [carregar]);
+export function useAnalise(data: string | null) {
+  return useQuery<Analise | null>({
+    queryKey: ['analise', data],
+    enabled: Boolean(data),
+    queryFn: async () => {
+      const { data: row, error } = await supabase.from('analises').select('payload').eq('data', data).maybeSingle();
+      if (error) throw error;
+      return (row?.payload ?? null) as Analise | null;
+    },
+  });
+}
 
-  const salvarBilhetes = useCallback(async (lista: Registro[]) => {
-    await fetch('/api/bilhetes', { method: 'POST', body: JSON.stringify(lista) });
-    await carregar();
-  }, [carregar]);
+export function useBilhetes() {
+  return useQuery<Registro[]>({
+    queryKey: ['bilhetes'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('bilhetes').select('*').order('registrado_em', { ascending: true });
+      if (error) throw error;
+      return (data ?? []) as Registro[];
+    },
+  });
+}
 
-  const salvarConfig = useCallback(async (cfg: Config) => {
-    await fetch('/api/config', { method: 'POST', body: JSON.stringify(cfg) });
-    await carregar();
-  }, [carregar]);
+/* ─────────────────────────── MUTATIONS ─────────────────────────── */
 
-  return { dados, erro, recarregar: carregar, salvarBilhetes, salvarConfig };
+export function useRegistrarBilhete() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ bilhete, data, valor }: { bilhete: Bilhete; data: string; valor: number }) => {
+      const { error } = await supabase.from('bilhetes').insert({
+        data,
+        pernas: bilhete.pernas.map((p) => ({ partida: p.partida, mercado: p.mercado, odd: p.odd })),
+        n_pernas: bilhete.n_pernas,
+        odd_total: bilhete.odd_total,
+        prob_combinada: bilhete.prob_combinada,
+        ev_pct: bilhete.ev_pct,
+        stake_sugerido: bilhete.stake_rs,
+        stake_real: valor,
+        // Segmentação pro breakdown — gravada no registro, não reprocessada depois.
+        ligas: [...new Set(bilhete.pernas.map((p) => p.liga))],
+        mercados: [...new Set(bilhete.pernas.map((p) => p.mercado))],
+        faixa_odd: bilhete.odd_total < 1.5 ? '1.40-1.50' : bilhete.odd_total < 1.6 ? '1.50-1.60' : '1.60+',
+        confianca: bilhete.todas_confianca_maxima ? 'maxima' : 'aprovada',
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bilhetes'] }),
+  });
+}
+
+export function useDefinirResultado() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ registro, resultado, banca }: { registro: Registro; resultado: 'ganhou' | 'perdeu'; banca: number }) => {
+      const retorno = resultado === 'ganhou' ? +(registro.stake_real * registro.odd_total).toFixed(2) : 0;
+      const bancaDepois = +(banca + retorno - registro.stake_real).toFixed(2);
+      const { error } = await supabase.from('bilhetes').update({
+        resultado, retorno_rs: retorno, banca_depois: bancaDepois, resolvido_em: new Date().toISOString(),
+      }).eq('id', registro.id);
+      if (error) throw error;
+      // A banca só muda aqui: registrar o resultado é o ato que move dinheiro de verdade.
+      const { error: e2 } = await supabase.from('config').update({ banca: bancaDepois }).eq('id', 1);
+      if (e2) throw e2;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bilhetes'] });
+      qc.invalidateQueries({ queryKey: ['config'] });
+    },
+  });
+}
+
+export function useSalvarConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (cfg: Config) => {
+      const { error } = await supabase.from('config').update({
+        banca: cfg.banca, stake_padrao_pct: cfg.stake_padrao_pct,
+        stake_confianca_maxima_pct: cfg.stake_confianca_maxima_pct,
+        teto_exposicao_diaria_pct: cfg.teto_exposicao_diaria_pct,
+        filtros: cfg.filtros, ligas: cfg.ligas, atualizado_em: new Date().toISOString(),
+      }).eq('id', 1);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['config'] }),
+  });
+}
+
+export function useRodarMotor() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ funcao, corpo }: { funcao: 'analisar' | 'bootstrap'; corpo?: Record<string, unknown> }) =>
+      invocar(funcao, corpo ?? {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['datas'] });
+      qc.invalidateQueries({ queryKey: ['analise'] });
+    },
+  });
 }
 
 export const brl = (v: number) =>

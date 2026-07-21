@@ -9,9 +9,12 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "analisar": "node motor/analisar.js",
-    "bootstrap": "node motor/bootstrap.js"
+    "bootstrap": "node motor/bootstrap.js",
+    "migrar": "node motor/migrar.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.8",
+    "@tanstack/react-query": "^5.101.4",
     "dotenv": "^17.4.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"

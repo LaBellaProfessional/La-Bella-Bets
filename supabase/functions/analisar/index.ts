@@ -36,9 +36,22 @@ Deno.serve(async (req) => {
   let corpo: Record<string, unknown> = {};
   try { corpo = await req.json(); } catch { /* sem corpo = hoje */ }
 
+  // Só service_role (cron/admin) ou sessão de usuário válida. Sem isso, qualquer um com a
+  // URL dispara análise e queima a cota das APIs pagas.
+  const auth = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');
+  const ehServico = auth === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!ehServico) {
+    const { data: u } = await sb.auth.getUser(auth);
+    if (!u?.user) return Response.json({ ok: false, erro: 'não autenticado' }, { status: 401 });
+  }
+
   const dataAlvo = (corpo.data as string) ?? hojeSP();
   const forcarDemo = Boolean(corpo.demo);
   const disparo = corpo.disparo === 'cron' ? 'cron' : 'manual';
+  // Reproduz o ajuste do motor local: ignora modelo_params e refaz o fit com a temporada da
+  // liga MAIS o histórico dos times do dia. É o modo usado pra provar que o porte não mexeu
+  // no método; a operação diária usa os parâmetros salvos (barato).
+  const fitLocal = Boolean(corpo.fit_local);
 
   const { data: exec } = await sb.from('execucoes')
     .insert({ funcao: 'analisar', disparo }).select('id').single();
@@ -102,7 +115,7 @@ Deno.serve(async (req) => {
 
     const dcPorLiga: Record<string, any> = {};
     for (const liga of new Set(jogos.map((j) => j.liga))) {
-      const salvo = paramsPorLiga[liga];
+      const salvo = fitLocal ? null : paramsPorLiga[liga];
       if (salvo?.disponivel) {
         dcPorLiga[liga] = {
           disponivel: true, ataque: salvo.ataque, defesa: salvo.defesa,
@@ -110,22 +123,17 @@ Deno.serve(async (req) => {
         };
         continue;
       }
-      // Sem parâmetro salvo: ajusta na hora com o que houver em cache (fallback).
-      const daLiga = jogos.filter((j) => j.liga === liga);
-      const times = new Set(daLiga.flatMap((j) => [j.casa, j.fora]));
-      const jogosLiga = [...(jogosPorLiga[liga] ?? [])];
-      const vistos = new Set(jogosLiga.map((g: any) => `${g.data}|${g.casa}|${g.fora}`));
-      for (const t of times) {
-        for (const g of historico[t] ?? []) {
-          const k = `${g.data}|${g.casa}|${g.fora}`;
-          if (!vistos.has(k)) { vistos.add(k); jogosLiga.push(g); }
-        }
-      }
-      dcPorLiga[liga] = ajustarDixonColes(jogosLiga, {
-        xi: (cfg.dixon_coles as any).xi,
-        minJogos: (cfg.dixon_coles as any).min_jogos_liga,
-        hoje: new Date(dataAlvo),
-      });
+      // Sem parâmetro salvo, o modelo fica INDISPONÍVEL — e o método já sabe lidar com isso
+      // (opera só com heurística, com confiança rebaixada).
+      //
+      // Ajustar aqui dentro NÃO é opção: o fit é numérico e pesado (a Champions tem 336 jogos
+      // e 42 times) e derruba a function com WORKER_RESOURCE_LIMIT. Quem ajusta é o bootstrap,
+      // fora do caminho crítico. Se caiu aqui, é sinal de rodar o refit — não de improvisar.
+      dcPorLiga[liga] = {
+        disponivel: false,
+        motivo: salvo?.motivo ?? 'sem parâmetros ajustados para esta liga — rode o bootstrap (refit)',
+        n_jogos: salvo?.n_jogos ?? 0,
+      };
     }
 
     // ── pernas (idêntico ao local)

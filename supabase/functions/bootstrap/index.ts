@@ -58,6 +58,13 @@ Deno.serve(async (req) => {
   let corpo: any = {};
   try { corpo = await req.json(); } catch { /* vazio */ }
 
+  const auth = (req.headers.get('Authorization') ?? '').replace('Bearer ', '');
+  const ehServico = auth === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!ehServico) {
+    const { data: u } = await sb.auth.getUser(auth);
+    if (!u?.user) return Response.json({ ok: false, erro: 'não autenticado' }, { status: 401 });
+  }
+
   const { data: exec } = await sb.from('execucoes')
     .insert({ funcao: 'bootstrap', disparo: corpo.disparo === 'cron' ? 'cron' : 'manual' })
     .select('id').single();
@@ -70,21 +77,30 @@ Deno.serve(async (req) => {
 
     // ── REFIT: só reajusta o modelo com o cache que já existe (não gasta API)
     if (corpo.refit) {
-      const { data: ligas } = await sb.from('historico_ligas').select('nome,jogos');
+      // Uma liga por vez (lote pequeno): o fit e numerico e pesado, e refazer 10 de uma vez
+      // estoura o WORKER_RESOURCE_LIMIT. Devolve 'faltam' e o chamador reinvoca ate zerar.
+      const { data: todasLigas } = await sb.from('historico_ligas').select('nome,jogos');
+      const pedidasRefit: string[] = corpo.ligas_nomes ?? [];
+      const alvo = (todasLigas ?? []).filter((l) => !pedidasRefit.length || pedidasRefit.includes(l.nome));
+      const ligas = alvo.slice(0, Number(corpo.lote ?? 1));
+      const faltamRefit = alvo.slice(ligas.length).map((l) => l.nome);
       const feitos: string[] = [];
       for (const l of ligas ?? []) {
+        // Só os jogos da própria liga: é o que cabe no orçamento de CPU da edge function.
+        // Liga de amostra curta (copa em fase inicial) fica indisponível aqui e o método opera
+        // com heurística — ou recebe um fit melhor via 'npm run sincronizar-modelo' (local).
         const m = ajustarDixonColes(l.jogos ?? [], { xi, minJogos, hoje: new Date() });
         await sb.from('modelo_params').upsert({
           liga: l.nome, disponivel: m.disponivel, motivo: m.motivo ?? null, n_jogos: m.n_jogos ?? 0,
           ataque: m.ataque ?? {}, defesa: m.defesa ?? {}, mando: m.mando ?? null, rho: m.rho ?? null,
           ajustado_em: new Date().toISOString(),
         });
-        feitos.push(`${l.nome}: ${m.disponivel ? 'ajustado' : m.motivo}`);
+        feitos.push(`${l.nome}: ${m.disponivel ? 'ajustado com ' + m.n_jogos + ' jogos' : m.motivo}`);
       }
       await sb.from('execucoes').update({
         terminado_em: new Date().toISOString(), ok: true, detalhe: { refit: feitos, ms: Date.now() - t0 },
       }).eq('id', exec?.id);
-      return Response.json({ ok: true, refit: feitos, ms: Date.now() - t0 });
+      return Response.json({ ok: true, refit: feitos, faltam: faltamRefit, ms: Date.now() - t0 });
     }
 
     // ── BOOTSTRAP: busca dados. Lote pequeno por invocação (tempo limite da function).

@@ -1,12 +1,14 @@
 import { brl, ROTULO, type Config, type Registro } from '../dados';
 
+type RegistroUI = Registro & { stake_rs: number };
+
 /**
  * A tela que decide se o método sobrevive ao próprio dono. Sem amostra, ROI é ruído:
  * a frase do topo é fixa de propósito.
  */
 export function Historico({
   registros, config, onResultado,
-}: { registros: Registro[]; config: Config; onResultado: (id: string, r: 'ganhou' | 'perdeu') => void }) {
+}: { registros: RegistroUI[]; config: Config; onResultado: (id: string, r: 'ganhou' | 'perdeu') => void }) {
   const fechados = registros.filter((r) => r.resultado !== 'pendente');
   const ganhos = fechados.filter((r) => r.resultado === 'ganhou');
   const investido = fechados.reduce((s, r) => s + r.stake_rs, 0);
