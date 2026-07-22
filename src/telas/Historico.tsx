@@ -1,4 +1,5 @@
-import { brl, rotuloMercado, type Config, type Registro } from '../dados';
+import { brl, rotuloMercado, type Config, type Registro, type SugestaoLiquidada } from '../dados';
+import { DesempenhoSugestoes } from './DesempenhoSugestoes';
 
 type RegistroUI = Registro & { stake_rs: number };
 
@@ -7,8 +8,12 @@ type RegistroUI = Registro & { stake_rs: number };
  * a frase do topo é fixa de propósito.
  */
 export function Historico({
-  registros, config, onResultado,
-}: { registros: RegistroUI[]; config: Config; onResultado: (id: string, r: 'ganhou' | 'perdeu') => void }) {
+  registros, config, sugestoes, onResultado,
+}: {
+  registros: RegistroUI[]; config: Config;
+  sugestoes: SugestaoLiquidada[];
+  onResultado: (id: string, r: 'ganhou' | 'perdeu') => void;
+}) {
   const fechados = registros.filter((r) => r.resultado !== 'pendente');
   const ganhos = fechados.filter((r) => r.resultado === 'ganhou');
   const investido = fechados.reduce((s, r) => s + r.stake_rs, 0);
@@ -32,7 +37,12 @@ export function Historico({
   const serie = [b, ...pontos];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
+      <div className="space-y-4">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <h2 className="text-sm font-bold uppercase tracking-widest text-t2">Suas apostas</h2>
+        <span className="rounded bg-verde/15 px-2 py-0.5 text-[10px] uppercase tracking-wider text-verde">real</span>
+      </div>
       <div className="rounded-lg border border-ambar/40 bg-ambar/10 px-4 py-3 text-center text-sm text-ambar">
         Mínimo 100-150 bilhetes antes de qualquer conclusão sobre o método.
         {fechados.length < 100 && <b> Você tem {fechados.length}.</b>}
@@ -82,6 +92,13 @@ export function Historico({
             ))}
           </div>
         )}
+      </div>
+      </div>
+
+      {/* Bloco VIRTUAL, separado por um respiro grande e um divisor: paper trading nunca se
+          mistura com as apostas reais de cima. */}
+      <div className="border-t border-borda pt-6">
+        <DesempenhoSugestoes sugestoes={sugestoes} />
       </div>
     </div>
   );

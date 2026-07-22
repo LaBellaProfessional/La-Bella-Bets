@@ -27,6 +27,7 @@ const [analise] = await pegar(`analises?select=data,payload&${filtro}`);
 if (!analise) { console.error(`sem análise para ${data ?? '(mais recente)'}`); process.exit(1); }
 const [config] = await pegar('config?id=eq.1&select=*');
 const bilhetes = await pegar('bilhetes?select=*&order=registrado_em.desc');
+const sugestoes = await pegar('sugestoes_liquidadas?select=*&order=data.desc');
 
 const APP = `// Gerado por scripts/harness-viewport.mjs — não editar, não versionar.
 import { createRoot } from 'react-dom/client';
@@ -36,7 +37,7 @@ import { Historico } from './telas/Historico';
 import { Configuracoes } from './telas/Configuracoes';
 import './index.css';
 
-const w = window as unknown as { __ANALISE: never; __CONFIG: never; __BILHETES: never };
+const w = window as unknown as { __ANALISE: never; __CONFIG: never; __BILHETES: never; __SUGESTOES: never };
 
 createRoot(document.getElementById('root')!).render(
   <div className="min-h-screen bg-fundo">
@@ -60,6 +61,7 @@ createRoot(document.getElementById('root')!).render(
       <Historico
         registros={(w.__BILHETES as never as { stake_real: number }[]).map((b) => ({ ...b, stake_rs: b.stake_real })) as never}
         config={w.__CONFIG as never}
+        sugestoes={w.__SUGESTOES}
         onResultado={() => {}}
       />
       <Configuracoes config={w.__CONFIG as never} onSalvar={() => {}} />
@@ -76,6 +78,7 @@ const HTML = `<!doctype html>
 window.__ANALISE = ${JSON.stringify(analise.payload)};
 window.__CONFIG = ${JSON.stringify(config)};
 window.__BILHETES = ${JSON.stringify(bilhetes)};
+window.__SUGESTOES = ${JSON.stringify(sugestoes)};
 <\/script></head>
 <body><div id="root"></div><script type="module" src="/src/_viewport.tsx"><\/script></body></html>`;
 

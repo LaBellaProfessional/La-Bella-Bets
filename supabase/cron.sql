@@ -49,3 +49,14 @@ select cron.schedule('bella-bets-escanteios-semanal', '30 10 * * 0', $$
       (select decrypted_secret from vault.decrypted_secrets where name='bella_service_key')),
     body:=jsonb_build_object('ligas',jsonb_build_array(72,71,98),'por_liga',150,'lote',60,'disparo','cron'));
 $$);
+
+-- 22/07: liquidação diária das sugestões (paper trading), 12:30 UTC (09:30 SP), 30 min
+-- depois do analisar. Liquida contra o placar real; busca por ID de fixture (não por data,
+-- que cairia na armadilha de fuso). Idempotente: só toca em status='pendente'.
+select cron.schedule('bella-bets-liquidar-sugestoes', '30 12 * * *', $$
+  select net.http_post(
+    url:='https://wsbhfljopcdynwnoioxx.supabase.co/functions/v1/liquidar-sugestoes',
+    headers:=jsonb_build_object('Content-Type','application/json','Authorization','Bearer '||
+      (select decrypted_secret from vault.decrypted_secrets where name='bella_service_key')),
+    body:=jsonb_build_object('disparo','cron'));
+$$);

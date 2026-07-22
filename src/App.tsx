@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { Login } from './Login';
 import {
-  useConfig, useDatas, useAnalise, useBilhetes,
+  useConfig, useDatas, useAnalise, useBilhetes, useSugestoes,
   useDefinirResultado, useSalvarConfig, useRodarMotor, useJanelaCompleta, useRegistrarEntrada,
 } from './dados';
 import { Inicio } from './telas/Inicio';
@@ -55,6 +55,7 @@ function Dash() {
   const qAnalise = useAnalise(data);
   const analise = qAnalise.data;
   const { data: bilhetes } = useBilhetes();
+  const { data: sugestoes } = useSugestoes();
   const qJanela = useJanelaCompleta(hojeISO);
   const janela = qJanela.data;
 
@@ -149,6 +150,7 @@ function Dash() {
           <Historico
             registros={(bilhetes ?? []).map((b) => ({ ...b, stake_rs: b.stake_real })) as never}
             config={config as never}
+            sugestoes={sugestoes ?? []}
             onResultado={(id: string, r: 'ganhou' | 'perdeu') => {
               const reg = (bilhetes ?? []).find((x) => x.id === id);
               if (reg) definirResultado.mutate({ registro: reg, resultado: r, banca: config.banca });

@@ -226,6 +226,31 @@ export const brl = (v: number) =>
 export const pct = (v: number | null | undefined, casas = 0) =>
   v == null ? '—' : `${(v * 100).toFixed(casas)}%`;
 
+/* ─────────────────── PAPER TRADING (sugestões virtuais) ─────────────────── */
+
+export interface SugestaoLiquidada {
+  id: string; data: string; partida: string; liga: string;
+  mercado: string; rotulo: string; familia: Familia; linha: number | null;
+  odd_referencia: number; odd_e_mercado: boolean; prob_modelo: number;
+  confianca: string; radar: boolean;
+  status: 'pendente' | 'ganhou' | 'perdeu';
+}
+
+/** Sugestões liquidadas + pendentes. A agregação (calibração, ROI virtual) é feita na tela. */
+export function useSugestoes() {
+  return useQuery<SugestaoLiquidada[]>({
+    queryKey: ['sugestoes'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('sugestoes_liquidadas')
+        .select('id,data,partida,liga,mercado,rotulo,familia,linha,odd_referencia,odd_e_mercado,prob_modelo,confianca,radar,status')
+        .order('data', { ascending: false });
+      if (error) throw error;
+      return (data ?? []) as SugestaoLiquidada[];
+    },
+  });
+}
+
 /** Analises dos proximos dias (D+1..D+3) — alimenta 'oportunidades antecipadas'. */
 export function useJanela(dataBase: string | null) {
   return useQuery<Analise[]>({

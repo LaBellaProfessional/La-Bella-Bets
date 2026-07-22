@@ -20,6 +20,7 @@ import { pernasEscanteios } from '../_shared/escanteios.js';
 import { avaliarPerna } from '../_shared/filtros.js';
 import { montarBilhetes, cardsHandicap } from '../_shared/montador.js';
 import { contagensDoJogo } from '../_shared/narrativa.js';
+import { sugestaoDaPerna } from '../_shared/sugestoes.js';
 import {
   temChaves, gerarDemo, buscarJogosDoDia, buscarHistoricoTime,
   buscarOddsDosJogos, cota, limitacoesPlano,
@@ -312,6 +313,27 @@ Deno.serve(async (req) => {
       };
 
       await sb.from('analises').upsert({ data: dataAlvo, modo, resumo, payload, gerado_em: new Date().toISOString() });
+
+      // PAPER TRADING: cada perna aprovada (inclusive as de radar) vira sugestão virtual.
+      // Upsert por (jogo_id, mercado) SEM tocar em status/gols: a captura roda todo dia até a
+      // véspera, guardando o estado mais informado (D+0), e nunca sobrescreve uma sugestão já
+      // liquidada. Envolto em try/catch de propósito — paper trading é acessório, não pode
+      // derrubar a análise do dia se a tabela falhar.
+      try {
+        const snapshot = {
+          filtros: cfg.filtros, pesos: cfg.pesos_heuristica, dixon_coles: cfg.dixon_coles,
+          modelo_por_liga: Object.fromEntries(
+            Object.entries(dcPorLiga).map(([l, m]: any) => [l, { disponivel: m.disponivel, n_jogos: m.n_jogos ?? 0 }]),
+          ),
+        };
+        const sugestoes = pernas.map((p: any) => sugestaoDaPerna(p, dataAlvo, snapshot)).filter(Boolean);
+        if (sugestoes.length) {
+          await sb.from('sugestoes_liquidadas').upsert(sugestoes, { onConflict: 'jogo_id,mercado' });
+        }
+      } catch (e) {
+        avisos.push(`captura de sugestões falhou: ${e instanceof Error ? e.message : e}`);
+      }
+
       porDia.push({ data: dataAlvo, horizonte, ...resumo });
     }
 
