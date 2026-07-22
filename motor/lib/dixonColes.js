@@ -174,6 +174,9 @@ export function mercadosDaMatriz(matriz) {
 
   return {
     casa_vence: casaVence, empate, fora_vence: foraVence,
+    // 1x2 seco (usado no modo odd manual, jogo sem linha da API): a vitória de cada lado.
+    resultado_casa: casaVence,
+    resultado_fora: foraVence,
     dupla_chance_casa: casaVence + empate,
     dupla_chance_fora: foraVence + empate,
     over_05: over05, over_15: over15, over_25: over25,

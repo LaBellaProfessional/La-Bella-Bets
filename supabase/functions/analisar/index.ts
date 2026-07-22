@@ -93,6 +93,13 @@ Deno.serve(async (req) => {
       ...(cfg.mercados_em_bilhete as string[]).filter((m: string) => !/^(over|under)_/.test(m)),
       'ah_casa_m05', 'ah_casa_m10', 'ah_fora_p05',
     ];
+    // MODO ODD MANUAL: set fixo avaliado quando o jogo NÃO tem linha da API. Só mercados que a
+    // matriz/heurística respondem sem preço: dupla chance, 1x2 seco (com gatilho no filtro) e as
+    // linhas de gols padrão. Sem AH aqui — é o mercado de maior variância e o pior sem odd pra ancorar.
+    const MERCADOS_SEM_LINHA = [
+      'dupla_chance_casa', 'dupla_chance_fora', 'resultado_casa', 'resultado_fora',
+      'over_15', 'over_25', 'under_25', 'under_35',
+    ];
     // Formato unificado: ev_minimo_antecipado gravado em % inteiro (6). Motor usa multiplicador.
     const evAntecipado = 1 + Number((cfg.filtros as any).ev_minimo_antecipado ?? 6) / 100;
 
@@ -209,6 +216,7 @@ Deno.serve(async (req) => {
       const pernas: any[] = [];
       const matrizes: Record<string, any> = {};
       const dcPorLiga: Record<string, any> = {};
+      const jogosSemLinha = new Set<string>();   // ids dos jogos sem linha da API (modo odd manual)
 
       for (const jogo of jogos) {
         dcPorLiga[jogo.liga] ??= dcDe(jogo.liga);
@@ -216,11 +224,14 @@ Deno.serve(async (req) => {
         matrizes[jogo.id] = matriz;
         const probsDC = mercadosDaMatriz(matriz);
 
-        // Linhas de gols efetivamente cotadas neste jogo (over_25, under_25, over_15…).
-        // É o conserto do mercado de gols: antes o sistema perguntava por três linhas fixas,
-        // duas das quais a API nunca publica — over 0.5 e under 4.5 morriam em "sem odd".
+        // JOGO SEM LINHA DA API: nenhum mercado cotado (Sula/Libertadores, às vezes Série B).
+        // Os modelos rodam igual (histórico existe) — então em vez de virar cards de reprovadas,
+        // o jogo entra no MODO ODD MANUAL: avalia um set fixo de mercados da matriz sem odd, e o
+        // Maikon digita a odd da casa dele. (`_casas` é metadado, não conta como mercado cotado.)
         const linhasGols = Object.keys(odds[jogo.id] ?? {}).filter((k) => /^(over|under)_\d+$/.test(k));
-        const MERCADOS = [...MERCADOS_FIXOS, ...linhasGols];
+        const jogoSemLinha = Object.keys(odds[jogo.id] ?? {}).filter((k) => k !== '_casas').length === 0;
+        if (jogoSemLinha) jogosSemLinha.add(jogo.id);
+        const MERCADOS = jogoSemLinha ? MERCADOS_SEM_LINHA : [...MERCADOS_FIXOS, ...linhasGols];
 
         for (const mercado of MERCADOS) {
           const h = probHeuristica({
@@ -237,17 +248,24 @@ Deno.serve(async (req) => {
             probPush: mercado === 'ah_casa_m10' ? (probsDC?.ah_casa_m10_push ?? 0) : 0,
             amostraMando: h.amostra_mando,
             filtros: { ...(cfg.filtros as any), mercados_em_bilhete: cfg.mercados_em_bilhete },
+            permitirSemOdd: jogoSemLinha,   // sem preço da API mas com modelos → avalia sem EV
           });
+          if (jogoSemLinha) p.sem_linha = true;
 
           // ── Regra de entrada antecipada: jogo a 1-3 dias tem escalação indefinida, então a
-          // margem dobra. Não reprova a perna — segura no radar até a véspera, quando a
-          // informação melhora e o EV é reavaliado com o time provável já conhecido.
+          // margem dobra. Não reprova a perna — segura no radar até a véspera.
           p.horizonte_dias = horizonte;
           p.casa_odd = odds[jogo.id]?._casas?.[mercado] ?? null;   // de qual bookmaker veio
-          if (p.aprovada && horizonte > 0 && (p.ev ?? 0) < evAntecipado) {
-            p.elegivel_bilhete = false;
-            p.radar = true;
-            p.motivo_radar = `EV ${(((p.ev ?? 1) - 1) * 100).toFixed(1)}% abaixo dos ${((evAntecipado - 1) * 100).toFixed(0)}% exigidos a ${horizonte} dia(s) do jogo — aguardar véspera (escalação)`;
+          if (p.aprovada && horizonte > 0) {
+            if (p.sem_odd_referencia) {
+              // Sem EV pra comparar (modo manual): segura no radar pela mesma razão dos escanteios.
+              p.radar = true;
+              p.motivo_radar = `sem linha da API a ${horizonte} dia(s) do jogo — aguardar a véspera (escalação)`;
+            } else if ((p.ev ?? 0) < evAntecipado) {
+              p.elegivel_bilhete = false;
+              p.radar = true;
+              p.motivo_radar = `EV ${(((p.ev ?? 1) - 1) * 100).toFixed(1)}% abaixo dos ${((evAntecipado - 1) * 100).toFixed(0)}% exigidos a ${horizonte} dia(s) do jogo — aguardar véspera (escalação)`;
+            }
           }
 
           const t = traj[`${jogo.id}|${mercado}`];
@@ -271,6 +289,7 @@ Deno.serve(async (req) => {
           banca: cfg.banca, stakePct: cfg.stake_padrao_pct,
         })) {
           p.horizonte_dias = horizonte;
+          if (jogoSemLinha) p.sem_linha = true;   // agrupa junto do resto do jogo sem linha
           // A regra de entrada antecipada vale igual: escalação indefinida muda escanteio
           // tanto quanto muda gol. Sem EV pra comparar, o critério é a própria convicção.
           if (p.aprovada && horizonte > 0) {
@@ -316,7 +335,7 @@ Deno.serve(async (req) => {
         ),
         // Contagens por jogo: e o que vira frase de apostador na aba Analises
         // ("nao perde em casa ha 9 de 10"), sem o dash precisar do historico inteiro.
-        jogos: jogos.map((j: any) => ({ ...j, contagens: contagensDoJogo(j, historico) })),
+        jogos: jogos.map((j: any) => ({ ...j, sem_linha: jogosSemLinha.has(j.id), contagens: contagensDoJogo(j, historico) })),
         pernas, radar,
         bilhetes: resultado.bilhetes ?? [],
         sem_bilhete: resultado.sem_bilhete ? { motivo: resultado.motivo } : null,

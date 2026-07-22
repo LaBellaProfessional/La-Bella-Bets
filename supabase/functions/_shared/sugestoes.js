@@ -88,5 +88,8 @@ export function resultadoSugestao(sug, res) {
   // Dupla chance = não perder o lado apostado.
   if (sug.mercado === 'dupla_chance_casa') return res.golsCasa >= res.golsFora ? 'ganhou' : 'perdeu';
   if (sug.mercado === 'dupla_chance_fora') return res.golsFora >= res.golsCasa ? 'ganhou' : 'perdeu';
+  // 1x2 seco (modo odd manual) = vitória do lado apostado.
+  if (sug.mercado === 'resultado_casa') return res.golsCasa > res.golsFora ? 'ganhou' : 'perdeu';
+  if (sug.mercado === 'resultado_fora') return res.golsFora > res.golsCasa ? 'ganhou' : 'perdeu';
   return null;
 }

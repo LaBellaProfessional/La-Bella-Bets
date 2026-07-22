@@ -34,6 +34,11 @@ function taxaNoBloco(jogos, mercado, time) {
       case 'dupla_chance_fora':
         bateu = saldo >= 0;
         break;
+      // Vitória seca (1x2) do lado apostado — a perspectiva já roteia pro time certo.
+      case 'resultado_casa':
+      case 'resultado_fora':
+        bateu = saldo > 0;
+        break;
       // Handicaps: taxa histórica REAL do time, não cópia do Dixon-Coles. Sem isso o filtro
       // de concordância viraria vazio pro AH (dois "modelos" com o mesmo número sempre
       // concordam) e todo handicap passaria batido.
@@ -64,8 +69,8 @@ function taxaNoBloco(jogos, mercado, time) {
  * Over/under continuam com os dois times: total de gols depende dos dois ataques e defesas.
  */
 function perspectivaDoMercado(mercado, casa, fora) {
-  if (mercado === 'ah_fora_p05' || mercado === 'dupla_chance_fora') return [fora];
-  if (mercado.startsWith('ah_casa') || mercado === 'dupla_chance_casa') return [casa];
+  if (mercado === 'ah_fora_p05' || mercado === 'dupla_chance_fora' || mercado === 'resultado_fora') return [fora];
+  if (mercado.startsWith('ah_casa') || mercado === 'dupla_chance_casa' || mercado === 'resultado_casa') return [casa];
   return [casa, fora];
 }
 

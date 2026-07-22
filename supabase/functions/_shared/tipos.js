@@ -11,6 +11,8 @@
 export const ROTULO_MERCADO = {
   dupla_chance_casa: 'Dupla chance casa (1X)',
   dupla_chance_fora: 'Dupla chance fora (X2)',
+  resultado_casa: 'Vitória casa (1)',
+  resultado_fora: 'Vitória fora (2)',
   ah_casa_m05: 'Handicap asiático casa -0.5',
   ah_casa_m10: 'Handicap asiático casa -1.0',
   ah_fora_p05: 'Handicap asiático fora +0.5',
@@ -77,6 +79,12 @@ export const MOTIVO = {
   ESC_PROB_BAIXA: (p, min) =>
     `escanteios: ${(p * 100).toFixed(0)}% de chance, abaixo do mínimo de ${(min * 100).toFixed(0)}% exigido de um modelo sem odd de mercado pra conferir`,
   ESC_AMOSTRA: (n, min) => `escanteios: só ${n} jogo(s) com estatística no bloco (mínimo ${min})`,
+  // Modo odd manual (jogo sem linha da API).
+  SEM_MODELO: () => 'sem histórico suficiente pros modelos rodarem neste jogo',
+  GATILHO_1X2: (p, gatilho) =>
+    `vitória seca com ${(p * 100).toFixed(0)}% — abaixo do gatilho de ${(gatilho * 100).toFixed(0)}% exigido sem preço de mercado`,
+  CONVICCAO_BAIXA: (p, piso) =>
+    `${(p * 100).toFixed(0)}% de convicção do modelo, abaixo do mínimo de ${(piso * 100).toFixed(0)}% pra sugerir sem preço de mercado`,
 };
 
 /**

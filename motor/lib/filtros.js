@@ -6,7 +6,7 @@
  */
 import { MOTIVO, CONFIANCA, MERCADOS_AH, ehGols, ehEscanteio } from './tipos.js';
 
-export function avaliarPerna({ jogo, mercado, odd, probH, probDC, probPush, amostraMando, filtros }) {
+export function avaliarPerna({ jogo, mercado, odd, probH, probDC, probPush, amostraMando, filtros, permitirSemOdd = false }) {
   const base = {
     jogo_id: jogo.id,
     partida: `${jogo.casa} x ${jogo.fora}`,
@@ -21,40 +21,68 @@ export function avaliarPerna({ jogo, mercado, odd, probH, probDC, probPush, amos
     amostra_mando: amostraMando,
   };
 
-  if (odd == null) return { ...base, aprovada: false, motivo: MOTIVO.SEM_ODD() };
-
-  if (odd < filtros.odd_minima_perna)
-    return { ...base, aprovada: false, motivo: MOTIVO.ODD_BAIXA(odd, filtros.odd_minima_perna) };
-
-  // MANDO CURTO: descarta só abaixo do mínimo absoluto. Entre o mínimo e o pleno a perna
-  // segue avaliada, com o peso do mando já rebaixado na heurística e a confiança limitada.
+  // MANDO CURTO: descarta só abaixo do mínimo. Entre o mínimo e o pleno segue avaliada, com o
+  // peso do mando rebaixado na heurística e a confiança limitada.
   const mandoMinimo = filtros.mando_minimo ?? 5;
   const mandoPleno = filtros.mando_pleno ?? 7;
+  const temDC = probDC != null;
+  const amostraCurta = amostraMando < mandoPleno;
+  // Prob final: média dos dois modelos; só heurística (com desconto) quando não há Dixon-Coles.
+  const probFinal = temDC ? (probH + probDC) / 2 : (probH != null ? probH * 0.95 : null);
 
-  // FORMATO UNIFICADO (22/07): os filtros de natureza percentual são gravados em % INTEIRO
-  // (ev_minimo 3, ev_teto_suspeito 35, confianca_maxima_ev 6, confianca_maxima_prob 80). O motor
-  // converte aqui pro número que a conta usa — multiplicador de EV (1+x/100) ou fração (x/100).
-  // divergencia_maxima_pp e ah_vantagem_minima_pp já são p.p., não passam por aqui. As mensagens
-  // recebem os valores JÁ convertidos, então o texto na tela Análises não muda.
+  // FORMATO UNIFICADO (22/07): filtros percentuais gravados em % inteiro; o motor converte aqui
+  // (1+x/100 ou x/100). As mensagens recebem os valores convertidos → texto na tela inalterado.
   const evMin = 1 + (filtros.ev_minimo ?? 3) / 100;
   const evTeto = (filtros.ev_teto_suspeito ?? 35) / 100;
   const cmEv = (filtros.confianca_maxima_ev ?? 6) / 100;
   const cmProb = (filtros.confianca_maxima_prob ?? 80) / 100;
 
+  // ── MODO ODD MANUAL (jogo sem linha da API, mas os modelos rodam) ───────────────────────────
+  // Avalia os filtros que NÃO dependem de odd (amostra, concordância, gatilho do 1x2, convicção
+  // mínima); os de EV ficam pra quando o Maikon digitar a odd da casa dele. Confiança SEMPRE
+  // rebaixada — sem preço de mercado pra conferir. Reusa `sem_odd_referencia` (a marca dos
+  // escanteios), então nota, frontend e registro já tratam com o mesmo cuidado.
+  if (odd == null) {
+    if (!permitirSemOdd) return { ...base, aprovada: false, motivo: MOTIVO.SEM_ODD() };
+    const sem = { ...base, sem_odd_referencia: true, prob_final: probFinal };
+    if (probFinal == null) return { ...sem, aprovada: false, motivo: MOTIVO.SEM_MODELO() };
+    if (amostraMando < mandoMinimo) return { ...sem, aprovada: false, motivo: MOTIVO.AMOSTRA(amostraMando, mandoMinimo) };
+    if (temDC) {
+      const divergencia = Math.abs(probH - probDC) * 100;
+      if (divergencia > filtros.divergencia_maxima_pp)
+        return { ...sem, aprovada: false, motivo: MOTIVO.DIVERGEM(probH, probDC, filtros.divergencia_maxima_pp) };
+    }
+    if (mercado === 'resultado_casa' || mercado === 'resultado_fora') {
+      const gatilho = (filtros.gatilho_1x2 ?? 72) / 100;   // vitória seca só com convicção alta
+      if (probFinal < gatilho) return { ...sem, aprovada: false, motivo: MOTIVO.GATILHO_1X2(probFinal, gatilho) };
+    }
+    const pisoManual = (filtros.convicao_minima_sem_odd ?? 50) / 100;
+    if (probFinal < pisoManual) return { ...sem, aprovada: false, motivo: MOTIVO.CONVICCAO_BAIXA(probFinal, pisoManual) };
+    return {
+      ...sem,
+      aprovada: true,
+      odd_justa: +(1 / probFinal).toFixed(2),
+      confianca: CONFIANCA.REBAIXADA,
+      dixon_coles_disponivel: temDC,
+      amostra_curta: amostraCurta,
+      badge_amostra: amostraCurta ? `amostra curta no mando (${amostraMando} jogos)` : null,
+      elegivel_bilhete: false,   // sem odd → nunca em combinada
+      justificativa: `${(probFinal * 100).toFixed(0)}% pelo modelo (${temDC ? 'heurística + Dixon-Coles' : 'só heurística'}), sem linha da API — digite a odd da sua casa.`,
+    };
+  }
+
+  if (odd < filtros.odd_minima_perna)
+    return { ...base, aprovada: false, motivo: MOTIVO.ODD_BAIXA(odd, filtros.odd_minima_perna) };
+
   if (amostraMando < mandoMinimo)
     return { ...base, aprovada: false, motivo: MOTIVO.AMOSTRA(amostraMando, mandoMinimo) };
 
-  // Concordância entre modelos. Sem Dixon-Coles (liga sem amostra), opera só com heurística
-  // e confiança rebaixada — não é motivo de descarte, é motivo de humildade.
-  const temDC = probDC != null;
+  // Concordância entre modelos. Sem Dixon-Coles opera só com heurística e confiança rebaixada.
   if (temDC) {
     const divergencia = Math.abs(probH - probDC) * 100;
     if (divergencia > filtros.divergencia_maxima_pp)
       return { ...base, aprovada: false, motivo: MOTIVO.DIVERGEM(probH, probDC, filtros.divergencia_maxima_pp) };
   }
-
-  // Prob final: média dos dois quando ambos existem; só heurística (com desconto) quando não.
-  const probFinal = temDC ? (probH + probDC) / 2 : probH * 0.95;
 
   // EV. Em mercado COM DEVOLUÇÃO (handicap -1.0, empata por 1 gol de saldo) a aposta volta
   // ao bolso no push: EV = p_ganha × odd + p_push × 1. Tratar push como derrota subestimaria
@@ -78,7 +106,6 @@ export function avaliarPerna({ jogo, mercado, odd, probH, probDC, probPush, amos
     return { ...base, aprovada: false, motivo: MOTIVO.EV_SUSPEITO(ev, evTeto), prob_final: probFinal, ev };
 
   // Amostra curta NUNCA vira confiança máxima: o dado é mais fino, o stake tem que ser o padrão.
-  const amostraCurta = amostraMando < mandoPleno;
   const maxima =
     !amostraCurta &&
     temDC &&
