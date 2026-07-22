@@ -310,7 +310,9 @@ function LinhaEntrada({
     return () => clearTimeout(t);
   }, [oddCasa, stake, tocou]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const odd = Number(oddCasa) || 0;
+  // Vírgula→ponto no MESMO ponto do veredito (não só no insert): o teclado iOS digita "1,68"
+  // e Number("1,68") seria NaN — o veredito ficaria mudo enquanto o justo já estava calculado.
+  const odd = normalizarOdd(oddCasa) ?? 0;
   const justo = prob > 0 ? 1 / prob : 0;
   const valorNaOdd = prob * odd;
   const vale = valorNaOdd >= evMinimo;
@@ -374,8 +376,10 @@ function LinhaEntrada({
       <div className="mt-2 rounded-lg bg-fundo p-2.5">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
           <span className="text-t2">Odd na sua casa</span>
+          {/* text + inputMode decimal (não type=number): no iOS o teclado digita vírgula e o
+              type=number descartaria o valor cru antes de chegar aqui. normalizarOdd cuida do resto. */}
           <input
-            type="number" step="0.01" inputMode="decimal" value={oddCasa}
+            type="text" inputMode="decimal" value={oddCasa}
             onChange={(e) => { setOddCasa(e.target.value); setTocou(true); if (estado === 'erro') setEstado('ocioso'); }}
             className="w-20 rounded border border-borda bg-card px-2 py-1 font-mono text-sm text-t1 outline-none focus:border-azul"
           />
