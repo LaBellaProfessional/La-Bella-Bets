@@ -12,7 +12,8 @@
     "bootstrap": "node motor/bootstrap.js",
     "migrar": "node motor/migrar.js",
     "medir-viewport": "node scripts/medir-viewport.mjs",
-    "harness-viewport": "node scripts/harness-viewport.mjs"
+    "harness-viewport": "node scripts/harness-viewport.mjs",
+    "gerar-icones": "node scripts/gerar-icones.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.8",

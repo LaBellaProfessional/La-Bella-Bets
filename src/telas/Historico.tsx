@@ -71,7 +71,12 @@ export function Historico({
                   )}
                 </div>
                 <div className="mt-1 text-xs text-t3">
-                  {r.pernas.map((p) => `${p.partida} (${rotuloMercado(p.mercado)} @ ${p.odd})`).join('  ·  ')}
+                  {/* rótulo gravado quando existe; senão deriva da chave. Escanteio não tem
+                      odd de mercado — mostra "sem odd", nunca "@ null". */}
+                  {r.pernas.map((p) => {
+                    const nome = p.rotulo ?? rotuloMercado(p.mercado);
+                    return `${p.partida} (${nome}${p.odd != null ? ` @ ${p.odd}` : ' · sem odd de mercado'})`;
+                  }).join('  ·  ')}
                 </div>
               </div>
             ))}

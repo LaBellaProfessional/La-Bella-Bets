@@ -224,11 +224,14 @@ function CardJogo({
               key={e.chave}
               data={data}
               pernas={pernas}
-              rotulo={
-                ehBilhete
-                  ? (e.bilhete.n_pernas > 1 ? `Bilhete · ${e.bilhete.n_pernas} pernas` : 'Entrada simples')
-                  : rotuloMercado(p!.mercado)
-              }
+              // O TÍTULO É SEMPRE O MERCADO. Bilhete de UMA perna caía em "Entrada simples" e
+              // o mercado sumia: o card dizia "Entrada simples · GOLS" e nada mais — nem
+              // over/under, nem a linha. Quem lê não tinha como saber o que apostar na casa, e
+              // o erro só apareceria com o dinheiro na mesa. Bilhete de várias pernas nomeia
+              // todas, porque a aposta é o conjunto.
+              rotulo={pernas.map((x) => rotuloMercado(x.mercado)).join('  +  ')}
+              // "entrada simples" / "bilhete" é o TIPO da aposta, nunca o nome dela.
+              tipo={ehBilhete && e.bilhete.n_pernas > 1 ? `bilhete · ${e.bilhete.n_pernas} pernas` : 'entrada simples'}
               familia={NOME_FAMILIA[familiaDoMercado(pernas[0].mercado)]}
               oddReferencia={ehBilhete ? e.bilhete.odd_total : semOdd ? (p!.odd_justa ?? 0) : (p!.odd ?? 0)}
               semOdd={semOdd}
@@ -249,10 +252,10 @@ function CardJogo({
 }
 
 function LinhaEntrada({
-  data, pernas, rotulo, familia, oddReferencia, prob, stakePct, stakeRS,
+  data, pernas, rotulo, tipo, familia, oddReferencia, prob, stakePct, stakeRS,
   confiancaMaxima, rebaixada, evMinimo, semOdd, jaRegistrado, onRegistrar,
 }: {
-  data: string; pernas: Perna[]; rotulo: string; familia: string;
+  data: string; pernas: Perna[]; rotulo: string; tipo: string; familia: string;
   oddReferencia: number; prob: number; stakePct: number; stakeRS: number;
   confiancaMaxima: boolean; rebaixada: boolean; evMinimo: number;
   semOdd?: boolean; jaRegistrado: boolean;
@@ -294,14 +297,15 @@ function LinhaEntrada({
   return (
     <div className="px-4 py-3">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className="text-sm font-medium text-azul">{rotulo}</span>
-        <span className="text-[10px] uppercase tracking-wider text-t3">{familia}</span>
+        <span className="text-sm font-semibold text-azul break-words">{rotulo}</span>
         <span className="ml-auto font-mono text-sm text-t2">
           {semOdd ? `justa @${oddReferencia.toFixed(2)}` : `@${oddReferencia.toFixed(2)}`}
         </span>
       </div>
 
       <div className="mt-1 flex flex-wrap gap-1.5">
+        <span className="rounded bg-fundo px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-t3">{familia}</span>
+        <span className="rounded bg-fundo px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-t3">{tipo}</span>
         {confiancaMaxima && (
           <span className="rounded bg-verde/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-verde">confiança máxima</span>
         )}

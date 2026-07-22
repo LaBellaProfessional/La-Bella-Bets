@@ -22,6 +22,21 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
+# O Netlify servia o manifest como application/octet-stream (extensão que ele não conhece).
+# O Chrome tolera, o Safari nem sempre — e sem manifest lido não há modo app.
+# Cache curto de propósito: trocar ícone ou nome do app não pode ficar preso por um ano.
+[[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json; charset=utf-8"
+    Cache-Control = "public, max-age=3600"
+
+# Ícones não têm hash no nome (o iOS precisa de caminho estável): cache de um dia, não eterno.
+[[headers]]
+  for = "/*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
 # SPA: qualquer rota cai no index.html
 [[redirects]]
   from = "/*"

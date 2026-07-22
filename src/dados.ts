@@ -77,7 +77,7 @@ export interface Analise {
 
 export interface Registro {
   id: string; data: string; registrado_em: string;
-  pernas: { partida: string; mercado: string; odd: number }[];
+  pernas: { partida: string; mercado: string; rotulo?: string; odd: number | null }[];
   odd_total: number; odd_referencia?: number | null; casa_odd?: string | null; prob_combinada: number; ev_pct: number;
   stake_real: number; resultado: 'pendente' | 'ganhou' | 'perdeu';
   retorno_rs: number; banca_depois: number | null;
@@ -151,7 +151,9 @@ export function useRegistrarBilhete() {
     mutationFn: async ({ bilhete, data, valor }: { bilhete: Bilhete; data: string; valor: number }) => {
       const { error } = await supabase.from('bilhetes').insert({
         data,
-        pernas: bilhete.pernas.map((p) => ({ partida: p.partida, mercado: p.mercado, odd: p.odd })),
+        // `rotulo` é gravado JUNTO da chave: o Histórico não pode depender de a função de
+        // rótulo nunca mudar pra dizer o que foi apostado. A aposta guarda o próprio nome.
+        pernas: bilhete.pernas.map((p) => ({ partida: p.partida, mercado: p.mercado, rotulo: rotuloMercado(p.mercado), odd: p.odd })),
         n_pernas: bilhete.n_pernas,
         odd_total: bilhete.odd_total,
         prob_combinada: bilhete.prob_combinada,
@@ -266,7 +268,7 @@ export function useRegistrarEntrada() {
     }) => {
       const { error } = await supabase.from('bilhetes').insert({
         data: e.data,
-        pernas: e.pernas.map((p) => ({ partida: p.partida, mercado: p.mercado, odd: p.odd })),
+        pernas: e.pernas.map((p) => ({ partida: p.partida, mercado: p.mercado, rotulo: rotuloMercado(p.mercado), odd: p.odd })),
         n_pernas: e.pernas.length,
         odd_total: e.odd_real,             // a odd REAL da aposta
         odd_referencia: e.odd_referencia,  // a que o modelo viu — a diferenca e o CLV

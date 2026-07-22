@@ -2,12 +2,25 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0d0f14" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>Bella Bets</title>
+
+    <!-- ÍCONES: gerados de assets-fonte/logo-bella-bets.jpeg por `npm run gerar-icones`.
+         São a variante ESCURA da marca — a logo original é preta sobre branco e sumiria no
+         fundo do dash. Fundo sólido #0d0f14, nunca transparente: o iOS chapa um preto atrás
+         de PNG com alfa e o ícone fica sujo. -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+    <!-- MODO APP -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#0d0f14" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- apple-mobile-web-app-capable é o nome antigo do de cima, e o iOS ainda só entende esse. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Bella Bets" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   </head>
   <body>
     <div id="root"></div>
@@ -99,6 +112,18 @@
           if (!montou()) return;
           clearInterval(conferirMontagem);
           try { sessionStorage.removeItem(CHAVE); } catch (e) { /* ignora */ }
+
+          // MODO APP: apaga o ?v= da barra depois que deu certo.
+          //
+          // O iOS captura a URL ATUAL quando o atalho é criado, não a start_url do manifest.
+          // Se o Maikon adicionar à tela de início logo depois de uma recuperação da guarda,
+          // o atalho nasceria fixado num '/?v=1753…' velho pra sempre. Trocar por '/' aqui é
+          // só cosmético pro navegador, mas é o que garante um atalho limpo.
+          try {
+            if (location.search.indexOf('v=') !== -1 && history.replaceState) {
+              history.replaceState(null, '', location.pathname);
+            }
+          } catch (e) { /* ignora */ }
         }, 500);
       })();
     </script>
