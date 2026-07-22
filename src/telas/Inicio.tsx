@@ -43,7 +43,7 @@ export function Vazio({ titulo, children }: { titulo: string; children: React.Re
 }
 
 export interface EntradaRegistro {
-  data: string; pernas: Perna[]; odd_real: number; odd_referencia: number;
+  data: string; pernas: Perna[]; odd_real: number; odd_referencia: number | null;
   prob: number; stake: number; casa_odd: string | null;
 }
 
@@ -165,7 +165,12 @@ function DiaBloco({
   const entradas = entradasTodas.filter((e) => !entradaRegistrada(e));
 
   // Bilhete que atravessa dois jogos é uma aposta só, com dois riscos: card próprio.
+  // (Combinada só existe com linha — sem odd da API não há bilhete montado.)
   const combinadas = entradas.filter((e) => jogosDe(e).length > 1).sort((a, b) => notaOrd(b) - notaOrd(a));
+
+  // Jogos SEM linha da API vão pra uma seção própria (modo odd manual).
+  const partidasSemLinha = new Set(pernas.filter((p) => p.sem_linha).map((p) => p.partida));
+
   const porJogo = new Map<string, Entrada[]>();
   for (const e of entradas) {
     if (jogosDe(e).length > 1) continue;
@@ -174,18 +179,37 @@ function DiaBloco({
     porJogo.get(k)!.push(e);
   }
 
-  // Jogos ordenados pela MAIOR nota do jogo (desc), horário como desempate.
-  const jogos = [...porJogo.entries()]
-    .map(([partida, lista]) => {
-      const ordenada = [...lista].sort((a, b) => notaOrd(b) - notaOrd(a)); // entradas por nota
-      const notaJogo = Math.max(...ordenada.map(notaOrd));
-      return { partida, lista: ordenada, notaJogo };
-    })
-    .sort((a, b) =>
-      b.notaJogo - a.notaJogo ||
-      (pernasDe(a.lista[0])[0].hora ?? '').localeCompare(pernasDe(b.lista[0])[0].hora ?? ''));
+  // Ordena por MAIOR nota do jogo (desc), horário como desempate.
+  const montarJogos = (manter: (partida: string) => boolean) =>
+    [...porJogo.entries()]
+      .filter(([partida]) => manter(partida))
+      .map(([partida, lista]) => {
+        const ordenada = [...lista].sort((a, b) => notaOrd(b) - notaOrd(a));
+        return { partida, lista: ordenada, notaJogo: Math.max(...ordenada.map(notaOrd)) };
+      })
+      .sort((a, b) =>
+        b.notaJogo - a.notaJogo ||
+        (pernasDe(a.lista[0])[0].hora ?? '').localeCompare(pernasDe(b.lista[0])[0].hora ?? ''));
 
-  const semEntrada = !combinadas.length && !jogos.length;
+  const jogos = montarJogos((p) => !partidasSemLinha.has(p));          // com linha
+  const jogosSemLinha = montarJogos((p) => partidasSemLinha.has(p));   // sem linha, acionáveis
+
+  // BOLÍVAR: jogo sem linha que NÃO produziu entrada acionável — não vira card de reprovadas,
+  // vai pro grupo recolhido com motivo honesto (sem histórico vs. nada passou nos filtros).
+  const partidasAcionaveis = new Set(jogosSemLinha.map((j) => j.partida));
+  const temPerna = new Set(pernas.map((p) => p.partida));
+  const bolivar = (analise.jogos ?? [])
+    .filter((j) => j.sem_linha)
+    .map((j) => `${j.casa} x ${j.fora}`)
+    .filter((partida) => !partidasAcionaveis.has(partida))
+    .map((partida) => ({
+      partida,
+      motivo: temPerna.has(partida)
+        ? 'sem linha da API · nada passou nos filtros do método'
+        : 'sem linha da API · sem histórico/estatística pros times',
+    }));
+
+  const semEntrada = !combinadas.length && !jogos.length && !jogosSemLinha.length && !bolivar.length;
   const tudoRegistrado = semEntrada && entradasTodas.length > 0;
 
   // Exposição do dia: quanto do teto de risco diário (8% da banca) já está EM JOGO neste dia.
@@ -257,9 +281,65 @@ function DiaBloco({
               />
             );
           })}
+
+          {/* ── JOGOS SEM LINHA ABERTA (modo odd manual) ── */}
+          {(jogosSemLinha.length > 0 || bolivar.length > 0) && (
+            <div className="pt-2">
+              <div className="mb-2 flex items-baseline gap-2">
+                <h3 className="text-sm font-semibold text-t2">Jogos sem linha aberta</h3>
+                <span className="text-[11px] text-t3">sua casa pode ter</span>
+              </div>
+              <div className="space-y-3">
+                {jogosSemLinha.map(({ partida, lista, notaJogo }) => {
+                  const p0 = pernasDe(lista[0])[0];
+                  // Regra de UMA aposta sem-odd-de-mercado por jogo: se já há uma pendente desse
+                  // jogo (odd_referencia null = sem linha), trava o registro das outras.
+                  const jaTemSemOdd = registrosPendentes.some(
+                    (r) => !r.odd_referencia && r.pernas.some((pp) => pp.partida === partida),
+                  );
+                  return (
+                    <CardJogo
+                      key={partida} data={analise.data} titulo={partida}
+                      subtitulo={[p0.liga, p0.hora, 'sem linha da API'].filter(Boolean).join(' · ')}
+                      entradas={lista} notaJogo={notaJogo >= 0 ? notaJogo : null}
+                      infoEntrada={infoEntrada} config={config} rascunhos={rascunhos}
+                      travarSemOdd={jaTemSemOdd}
+                      onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
+                    />
+                  );
+                })}
+                {bolivar.length > 0 && <GrupoBolivar jogos={bolivar} />}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>
+  );
+}
+
+/** Grupo recolhido dos jogos sem linha E sem nada acionável — motivo honesto, sem poluir a tela. */
+function GrupoBolivar({ jogos }: { jogos: { partida: string; motivo: string }[] }) {
+  const [aberto, setAberto] = useState(false);
+  return (
+    <div className="overflow-hidden rounded-xl border border-borda bg-card">
+      <button onClick={() => setAberto((v) => !v)} className="flex w-full items-center gap-2 px-4 py-3 text-left">
+        <span className="flex-1 text-sm text-t2">
+          {jogos.length} {jogos.length === 1 ? 'jogo sem linha e sem nada acionável' : 'jogos sem linha e sem nada acionável'}
+        </span>
+        <span className="text-xs text-t3">{aberto ? 'ocultar' : 'ver'}</span>
+      </button>
+      {aberto && (
+        <div className="divide-y divide-borda border-t border-borda">
+          {jogos.map((j) => (
+            <div key={j.partida} className="px-4 py-2">
+              <div className="text-sm text-t1 break-words">{j.partida}</div>
+              <div className="mt-0.5 text-[11px] text-t3">{j.motivo}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -277,11 +357,11 @@ function BadgeNota({ nota }: { nota: number }) {
 }
 
 function CardJogo({
-  data, titulo, subtitulo, entradas, notaJogo, infoEntrada, config, rascunhos, onRegistrar, onSalvarRascunho,
+  data, titulo, subtitulo, entradas, notaJogo, infoEntrada, config, rascunhos, travarSemOdd, onRegistrar, onSalvarRascunho,
 }: {
   data: string; titulo: string; subtitulo: string; entradas: Entrada[]; notaJogo: number | null;
   infoEntrada: (e: Entrada) => InfoNota;
-  config?: Config; rascunhos: Map<string, Rascunho>;
+  config?: Config; rascunhos: Map<string, Rascunho>; travarSemOdd?: boolean;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
   onSalvarRascunho: SalvarRascunho;
 }) {
@@ -334,6 +414,7 @@ function CardJogo({
               notaComp={info.comp}
               notaEscanteio={info.escanteio}
               bilheteMultiplo={ehBilhete && e.bilhete.n_pernas > 1}
+              travado={Boolean(travarSemOdd && semOdd)}
               rascunho={rascunhos.get(chaveEntrada(data, pernas))}
               onRegistrar={onRegistrar}
               onSalvarRascunho={onSalvarRascunho}
@@ -347,14 +428,14 @@ function CardJogo({
 
 function LinhaEntrada({
   data, pernas, rotulo, tipo, familia, oddReferencia, prob, stakePct, stakeRS,
-  confiancaMaxima, rebaixada, evMinimo, semOdd, nota, notaComp, notaEscanteio, bilheteMultiplo,
+  confiancaMaxima, rebaixada, evMinimo, semOdd, nota, notaComp, notaEscanteio, bilheteMultiplo, travado,
   rascunho, onRegistrar, onSalvarRascunho,
 }: {
   data: string; pernas: Perna[]; rotulo: string; tipo: string; familia: string;
   oddReferencia: number; prob: number; stakePct: number; stakeRS: number;
   confiancaMaxima: boolean; rebaixada: boolean; evMinimo: number;
   semOdd?: boolean; nota: number | null; notaComp: NotaComponentes | null;
-  notaEscanteio: boolean; bilheteMultiplo: boolean; rascunho?: Rascunho;
+  notaEscanteio: boolean; bilheteMultiplo: boolean; travado?: boolean; rascunho?: Rascunho;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
   onSalvarRascunho: SalvarRascunho;
 }) {
@@ -397,13 +478,17 @@ function LinhaEntrada({
   const vale = valorNaOdd >= evMinimo;
   const ganho = (valorNaOdd - 1) * 100;
   const registrado = estado === 'ok';
+  // Teto de implausibilidade MAIS rígido no modo manual: sem preço de mercado pra ancorar,
+  // vantagem digitada acima de 25% quase sempre é odd errada (pegou o mercado errado).
+  const alertaImplausivel = Boolean(semOdd) && odd > 1 && ganho > 25;
 
   async function registrar() {
     setEstado('enviando'); setErro(null);
     try {
       await onRegistrar({
         data, pernas, odd_real: odd,
-        odd_referencia: semOdd ? 0 : oddReferencia,
+        // Sem preço de mercado → sem CLV: grava null (o virtual/Histórico trata como escanteio).
+        odd_referencia: semOdd ? null : oddReferencia,
         prob, stake, casa_odd: pernas[0]?.casa_odd ?? null,
       });
       setEstado('ok');
@@ -504,6 +589,11 @@ function LinhaEntrada({
               ? `Ainda vale — @${odd.toFixed(2)} paga acima do justo @${justo.toFixed(2)} (+${ganho.toFixed(1)}%)`
               : `Nessa odd a vantagem sumiu — o justo é @${justo.toFixed(2)}, melhor pular`}
         </div>
+        {alertaImplausivel && (
+          <div className="mt-1 rounded bg-vermelho/10 px-2 py-1 text-[11px] leading-snug text-vermelho">
+            Vantagem de {ganho.toFixed(0)}% sem preço de mercado pra ancorar — confira se pegou o mercado certo (vantagem improvável).
+          </div>
+        )}
         <div className="mt-0.5 text-[11px] text-t3">Chance real de dar certo: {(prob * 100).toFixed(0)}%</div>
       </div>
 
@@ -516,13 +606,14 @@ function LinhaEntrada({
         />
         <span className="text-[11px] text-t3">sugerido {brl(stakeRS)} ({stakePct}%)</span>
         <button
-          disabled={registrado || !vale || estado === 'enviando'}
+          disabled={registrado || travado || !vale || estado === 'enviando'}
           onClick={registrar}
           className={`ml-auto rounded px-3 py-1.5 text-sm font-semibold disabled:cursor-not-allowed ${
             registrado ? 'bg-verde/20 text-verde' : 'bg-rosa text-white disabled:bg-borda disabled:text-t3'
           }`}
         >
           {registrado ? 'registrado ✓'
+            : travado ? 'só 1 sem linha/jogo'
             : estado === 'enviando' ? 'registrando…'
             : odd <= 1 ? 'Digite a odd'
             : vale ? 'Registrar' : 'Sem valor'}

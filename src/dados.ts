@@ -4,6 +4,8 @@ import { supabase, invocar } from './supabase';
 export const ROTULO: Record<string, string> = {
   dupla_chance_casa: 'DC casa (1X)',
   dupla_chance_fora: 'DC fora (X2)',
+  resultado_casa: 'Vitória casa (1)',
+  resultado_fora: 'Vitória fora (2)',
   ah_casa_m05: 'AH casa -0.5',
   ah_casa_m10: 'AH casa -1.0',
   ah_fora_p05: 'AH fora +0.5',
@@ -52,6 +54,7 @@ export interface Perna {
   sem_odd_referencia?: boolean; odd_justa?: number; lambda_escanteios?: number | null;
   stake_pct?: number; stake_rs?: number;
   nota?: number; nota_componentes?: NotaComponentes | null;
+  sem_linha?: boolean;   // jogo sem linha da API (modo odd manual) — agrupa em seção própria
 }
 
 export interface NotaComponentes {
@@ -100,7 +103,7 @@ export interface Analise {
   data: string; modo: 'demo' | 'real'; gerado_em: string; banca_no_momento: number;
   resumo: { jogos: number; pernas_avaliadas: number; aprovadas: number; descartadas: number; bilhetes: number; sem_bilhete: boolean };
   dixon_coles_por_liga: Record<string, { disponivel: boolean; motivo: string | null; n_jogos: number }>;
-  jogos: { id: string; liga: string; hora: string; casa: string; fora: string; contagens?: unknown }[];
+  jogos: { id: string; liga: string; hora: string; casa: string; fora: string; sem_linha?: boolean; contagens?: unknown }[];
   pernas: Perna[]; bilhetes: Bilhete[];
   sem_bilhete: { motivo: string } | null;
   exposicao: { total_rs: number; pct_banca: number; teto_pct: number; teto_rs?: number } | null;
@@ -461,7 +464,7 @@ export function useRegistrarEntrada() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (e: {
-      data: string; pernas: Perna[]; odd_real: number; odd_referencia: number;
+      data: string; pernas: Perna[]; odd_real: number; odd_referencia: number | null;
       prob: number; stake: number; casa_odd: string | null;
     }) => {
       const { error } = await supabase.from('bilhetes').insert({
