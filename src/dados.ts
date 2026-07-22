@@ -230,7 +230,7 @@ export function useRegistrarBilhete() {
 export function useAlterarResultado() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ registro, novo, banca }: { registro: Registro; novo: 'ganhou' | 'perdeu' | 'cancelada'; banca: number }) => {
+    mutationFn: async ({ registro, novo, banca, detalhe }: { registro: Registro; novo: 'ganhou' | 'perdeu' | 'cancelada'; banca: number; detalhe?: string }) => {
       const deltaDe = (res: string, retorno: number, stake: number) =>
         res === 'ganhou' ? retorno - stake : res === 'perdeu' ? -stake : 0;
 
@@ -256,7 +256,7 @@ export function useAlterarResultado() {
 
       // Auditoria — acessório, não pode derrubar a operação principal.
       try {
-        await supabase.from('bilhete_eventos').insert({ bilhete_id: registro.id, de: registro.resultado, para: novo });
+        await supabase.from('bilhete_eventos').insert({ bilhete_id: registro.id, de: registro.resultado, para: novo, detalhe: detalhe ?? null });
       } catch { /* rastro é best-effort */ }
     },
     onSuccess: () => {
@@ -270,7 +270,7 @@ export function useAlterarResultado() {
 
 export interface Rascunho {
   chave: string; data: string; partida: string | null; mercado: string | null;
-  odd_casa: string | null; stake: number | null; atualizado_em: string;
+  odd_casa: number | null; stake: number | null; atualizado_em: string;
 }
 
 /**
@@ -292,8 +292,9 @@ export function useRascunhos() {
 
 export function useSalvarRascunho() {
   // Fire-and-forget: não invalida (evita re-render a cada tecla). O rascunho só é lido no mount.
+  // odd_casa chega já normalizado (número ou null) — a coluna é numeric, texto livre não entra.
   return useMutation({
-    mutationFn: async (r: { chave: string; data: string; partida: string | null; mercado: string | null; odd_casa: string; stake: number }) => {
+    mutationFn: async (r: { chave: string; data: string; partida: string | null; mercado: string | null; odd_casa: number | null; stake: number | null }) => {
       await supabase.from('rascunhos').upsert({ ...r, atualizado_em: new Date().toISOString() }, { onConflict: 'chave' });
     },
   });

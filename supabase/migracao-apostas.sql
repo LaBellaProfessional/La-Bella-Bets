@@ -18,8 +18,11 @@ create table if not exists public.bilhete_eventos (
   bilhete_id   uuid not null references public.bilhetes(id) on delete cascade,
   de           text,
   para         text not null,
+  detalhe      text,           -- motivo/contexto opcional (ex: "corrigido: casa liquidou como push")
   em           timestamptz not null default now()
 );
+-- Idempotência: se a tabela já existir sem a coluna (migração aplicada antes do ajuste), adiciona.
+alter table public.bilhete_eventos add column if not exists detalhe text;
 create index if not exists bilhete_eventos_bilhete_idx on public.bilhete_eventos (bilhete_id, em);
 alter table public.bilhete_eventos enable row level security;
 drop policy if exists bilhete_eventos_autenticado on public.bilhete_eventos;
@@ -32,15 +35,20 @@ create policy bilhete_eventos_autenticado on public.bilhete_eventos
 --    iPhone↔PC. A chave é a MESMA identidade de entrada da Início: data + conjunto de
 --    (partida·mercado) ordenado. Degenera em (data, jogo, mercado) para entrada simples.
 --    Morre sozinho: apagado ao registrar (no app) e varrido após 48h pelo cron abaixo.
+--   odd_casa é numeric (não text): odd como texto livre deixaria "1,68" virar NaN no recálculo
+--   do veredito ao restaurar. O front normaliza vírgula→ponto e só grava número válido.
 create table if not exists public.rascunhos (
   chave         text primary key,
   data          date not null,
   partida       text,
   mercado       text,
-  odd_casa      text,
+  odd_casa      numeric(6,2),
   stake         numeric(12,2),
   atualizado_em timestamptz not null default now()
 );
+-- Idempotência: se a tabela já existir com odd_casa text (versão anterior), converte.
+alter table public.rascunhos alter column odd_casa type numeric(6,2)
+  using nullif(replace(odd_casa::text, ',', '.'), '')::numeric(6,2);
 create index if not exists rascunhos_atualizado_idx on public.rascunhos (atualizado_em);
 alter table public.rascunhos enable row level security;
 drop policy if exists rascunhos_autenticado on public.rascunhos;

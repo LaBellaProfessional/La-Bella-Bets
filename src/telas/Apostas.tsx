@@ -21,7 +21,7 @@ export function Apostas({
   registros: Registro[];
   sugIndex: Map<string, SugLiquidada>;
   banca: number;
-  onAlterar: (registro: Registro, novo: 'ganhou' | 'perdeu' | 'cancelada') => Promise<unknown>;
+  onAlterar: (registro: Registro, novo: 'ganhou' | 'perdeu' | 'cancelada', detalhe?: string) => Promise<unknown>;
 }) {
   // Cancelada não aparece: "não apostei" tira da lista.
   const vivas = registros
@@ -108,7 +108,7 @@ function CardAposta({
   registro: Registro; estado: EstadoAposta;
   pre?: { resultado: 'ganhou' | 'perdeu'; placar: string };
   banca: number;
-  onAlterar: (registro: Registro, novo: 'ganhou' | 'perdeu' | 'cancelada') => Promise<unknown>;
+  onAlterar: (registro: Registro, novo: 'ganhou' | 'perdeu' | 'cancelada', detalhe?: string) => Promise<unknown>;
 }) {
   const [aberto, setAberto] = useState(false); // reabre os botões numa resolvida/pendente
   const [enviando, setEnviando] = useState<null | 'ganhou' | 'perdeu' | 'cancelada'>(null);
@@ -121,9 +121,20 @@ function CardAposta({
   const hora = horaDaAposta(registro);
   const lucro = registro.retorno_rs - registro.stake_real;
 
+  // Contexto pra auditoria (bilhete_eventos.detalhe). O caso mais valioso: registrar quando a
+  // confirmação CONTRARIOU a pré-sugestão da liquidação virtual.
+  function detalheDe(novo: 'ganhou' | 'perdeu' | 'cancelada'): string | undefined {
+    if (estado === 'ganhou' || estado === 'perdeu') return `correção (era ${estado})`;
+    if (estado === 'aguardando' && pre) {
+      return novo === pre.resultado ? 'confirmado (pré-sugestão)' : `contrariou pré-sugestão (indicava ${pre.resultado})`;
+    }
+    if (estado === 'pendente') return novo === 'cancelada' ? 'desfeito (pendente)' : 'marcado manualmente';
+    return undefined;
+  }
+
   async function acao(novo: 'ganhou' | 'perdeu' | 'cancelada') {
     setEnviando(novo); setErro(null);
-    try { await onAlterar(registro, novo); setAberto(false); }
+    try { await onAlterar(registro, novo, detalheDe(novo)); setAberto(false); }
     catch (e) { setErro(e instanceof Error ? e.message : String(e)); }
     finally { setEnviando(null); }
   }

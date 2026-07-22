@@ -49,7 +49,13 @@ export interface EntradaRegistro {
 }
 
 export interface SalvarRascunho {
-  (r: { chave: string; data: string; partida: string | null; mercado: string | null; odd_casa: string; stake: number }): void;
+  (r: { chave: string; data: string; partida: string | null; mercado: string | null; odd_casa: number | null; stake: number | null }): void;
+}
+
+/** Odd digitada (aceita vírgula) → número válido ou null. Evita "1,68" virar NaN no restore. */
+function normalizarOdd(bruto: string): number | null {
+  const n = Number(String(bruto).replace(',', '.'));
+  return Number.isFinite(n) && n > 0 ? +n.toFixed(2) : null;
 }
 
 export function Inicio({
@@ -281,17 +287,24 @@ function LinhaEntrada({
   // Restaura o rascunho quando ele chega do servidor — sem sobrescrever o que o usuário já digitou.
   useEffect(() => {
     if (tocou || !rascunho) return;
-    if (rascunho.odd_casa != null && rascunho.odd_casa !== '') setOddCasa(rascunho.odd_casa);
+    if (rascunho.odd_casa != null) setOddCasa(String(rascunho.odd_casa));
     if (rascunho.stake != null) setStake(rascunho.stake);
-    if (rascunho.odd_casa || rascunho.stake != null) setSalvo(true);
+    if (rascunho.odd_casa != null || rascunho.stake != null) setSalvo(true);
   }, [rascunho, tocou]);
 
   // Salva o rascunho 1s depois de o usuário parar de digitar (debounce). Fire-and-forget.
+  // odd_casa vira número (ou null) antes de sair daqui — a coluna é numeric.
   useEffect(() => {
     if (!tocou) return;
     setSalvo(false);
     const t = setTimeout(() => {
-      onSalvarRascunho({ chave, data, partida: pernas[0]?.partida ?? null, mercado: pernas.map((p) => p.mercado).join('+'), odd_casa: oddCasa, stake });
+      onSalvarRascunho({
+        chave, data,
+        partida: pernas[0]?.partida ?? null,
+        mercado: pernas.map((p) => p.mercado).join('+'),
+        odd_casa: normalizarOdd(oddCasa),
+        stake: Number.isFinite(stake) ? stake : null,
+      });
       setSalvo(true);
     }, 1000);
     return () => clearTimeout(t);

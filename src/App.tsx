@@ -173,7 +173,7 @@ function Dash() {
             registros={bilhetes ?? []}
             sugIndex={sugIndex}
             banca={config.banca}
-            onAlterar={(registro, novo) => alterarResultado.mutateAsync({ registro, novo, banca: config.banca })}
+            onAlterar={(registro, novo, detalhe) => alterarResultado.mutateAsync({ registro, novo, banca: config.banca, detalhe })}
           />
         )}
         {aba === 'analises' && <Analises analise={analise ?? null} />}
