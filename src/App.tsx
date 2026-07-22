@@ -6,6 +6,7 @@ import {
   useConfig, useDatas, useAnalise, useBilhetes, useSugestoes,
   useAlterarResultado, useSalvarConfig, useRodarMotor, useJanelaCompleta, useRegistrarEntrada,
   useRascunhos, useSalvarRascunho, indiceSugestoes, classificarAposta,
+  brl, emJogoDe, saldoDaSemana, type Registro,
 } from './dados';
 import { Inicio } from './telas/Inicio';
 import { Apostas } from './telas/Apostas';
@@ -97,35 +98,32 @@ function Dash() {
 
   return (
     <div className="min-h-screen bg-fundo">
-      <header className="safe-top sticky top-0 z-10 border-b border-borda bg-fundo/95 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-2 px-4 py-3">
+      <header className="safe-top sticky top-0 z-20 border-b border-borda bg-fundo/95 backdrop-blur">
+        <div className="mx-auto flex max-w-4xl items-center gap-2 px-4 py-3">
           <span className="text-lg font-bold tracking-tight text-t1">
             BELLA<span className="text-rosa">BETS</span>
           </span>
-          <button
-            onClick={() => rodar('analisar')} disabled={motor.isPending}
-            className="ml-auto rounded border border-azul px-2 py-1 text-[11px] text-azul disabled:opacity-40"
-          >
-            Analisar agora
-          </button>
-          <button
-            onClick={() => rodar('bootstrap', { lote: 2 })} disabled={motor.isPending}
-            className="rounded border border-borda px-2 py-1 text-[11px] text-t2 disabled:opacity-40"
-          >
-            Bootstrap
-          </button>
-          {/* Seletor de data só onde faz sentido escolher um dia: Análises e Histórico. Na
-              Início ele era redundante — a aba já mostra a janela inteira, um dia por bloco —
-              e dava a impressão falsa de que trocar a data mudaria a lista. */}
-          {datas && datas.length > 0 && (aba === 'analises' || aba === 'historico') && (
-            <select
-              value={data ?? ''} onChange={(e) => setDataSel(e.target.value)}
-              className="rounded border border-borda bg-card px-2 py-1 text-xs text-t2 outline-none"
-            >
-              {datas.map((d) => <option key={d} value={d}>{d}</option>)}
-            </select>
-          )}
-          <button onClick={() => supabase.auth.signOut()} className="text-[11px] text-t3 hover:text-t2">sair</button>
+
+          <div className="ml-auto flex items-center gap-2">
+            {/* Seletor de data só onde faz sentido escolher um dia: Análises e Histórico. */}
+            {datas && datas.length > 0 && (aba === 'analises' || aba === 'historico') && (
+              <select
+                value={data ?? ''} onChange={(e) => setDataSel(e.target.value)}
+                className="rounded border border-borda bg-card px-2 py-1 text-xs text-t2 outline-none"
+              >
+                {datas.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+            )}
+            {/* Chip da banca consolidada — sempre visível, popover com as camadas. */}
+            <ChipBanca banca={config?.banca ?? 0} registros={bilhetes ?? []} />
+            {/* Ações que antes eram botões soltos, agora no menu. */}
+            <MenuAcoes
+              ocupado={motor.isPending}
+              onAnalisar={() => rodar('analisar')}
+              onAtualizar={() => rodar('bootstrap', { lote: 2 })}
+              onSair={() => supabase.auth.signOut()}
+            />
+          </div>
         </div>
         {aviso && <div className="mx-auto max-w-4xl px-4 pb-2 text-[11px] text-azul">{aviso}</div>}
         <nav className="mx-auto flex max-w-4xl gap-1 px-2">
@@ -192,6 +190,94 @@ function Dash() {
           <Configuracoes config={config as never} onSalvar={(c) => salvarConfig.mutate(c as never)} />
         )}
       </main>
+    </div>
+  );
+}
+
+/**
+ * Chip da banca consolidada no header, estilo casa de aposta: valor sempre visível, toque abre
+ * as camadas. Banca vem da mesma fonte da aba Apostas (config + bilhetes), então atualiza reativa
+ * quando um resultado é confirmado.
+ */
+function ChipBanca({ banca, registros }: { banca: number; registros: Registro[] }) {
+  const [aberto, setAberto] = useState(false);
+  const emJogo = emJogoDe(registros);
+  const disponivel = +(banca - emJogo).toFixed(2);
+  const saldo = saldoDaSemana(registros);
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setAberto((v) => !v)}
+        className="rounded-lg border border-borda bg-card px-2.5 py-1 font-mono text-sm font-bold text-t1 tabular-nums"
+      >
+        {brl(banca)}
+      </button>
+      {aberto && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setAberto(false)} />
+          <div className="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg border border-borda bg-card p-3 text-sm shadow-lg">
+            <LinhaChip rotulo="Banca" valor={brl(banca)} />
+            <LinhaChip rotulo="Em jogo" valor={brl(emJogo)} cor={emJogo > 0 ? 'text-ambar' : 'text-t1'} />
+            <LinhaChip rotulo="Disponível" valor={brl(disponivel)} cor="text-verde" />
+            <div className="mt-2 border-t border-borda pt-2">
+              <LinhaChip
+                rotulo="Saldo da semana"
+                valor={`${saldo >= 0 ? '+' : '−'}${brl(Math.abs(saldo))}`}
+                cor={saldo >= 0 ? 'text-verde' : 'text-vermelho'}
+              />
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function LinhaChip({ rotulo, valor, cor = 'text-t1' }: { rotulo: string; valor: string; cor?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 py-0.5">
+      <span className="text-xs text-t3">{rotulo}</span>
+      <span className={`font-mono text-sm font-semibold tabular-nums ${cor}`}>{valor}</span>
+    </div>
+  );
+}
+
+/** Menu de ações (⋯) — o que antes eram botões soltos no header. */
+function MenuAcoes({
+  ocupado, onAnalisar, onAtualizar, onSair,
+}: {
+  ocupado: boolean; onAnalisar: () => void; onAtualizar: () => void; onSair: () => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const acao = (fn: () => void) => () => { fn(); setAberto(false); };
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setAberto((v) => !v)} aria-label="mais ações"
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-borda text-t2"
+      >
+        {/* lucide MoreVertical */}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+          <circle cx="12" cy="12" r="1" /><circle cx="12" cy="5" r="1" /><circle cx="12" cy="19" r="1" />
+        </svg>
+      </button>
+      {aberto && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setAberto(false)} />
+          <div className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-lg border border-borda bg-card py-1 shadow-lg">
+            <button onClick={acao(onAnalisar)} disabled={ocupado} className="block w-full px-3 py-2 text-left text-sm text-t2 hover:bg-fundo disabled:opacity-40">
+              Analisar agora
+            </button>
+            <button onClick={acao(onAtualizar)} disabled={ocupado} className="block w-full px-3 py-2 text-left text-sm text-t2 hover:bg-fundo disabled:opacity-40">
+              Atualizar dados
+            </button>
+            <div className="my-1 border-t border-borda" />
+            <button onClick={acao(onSair)} className="block w-full px-3 py-2 text-left text-sm text-t3 hover:bg-fundo">
+              Sair
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

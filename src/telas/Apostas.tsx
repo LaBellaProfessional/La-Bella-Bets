@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  brl, rotuloMercado, horaDaAposta, classificarAposta,
+  brl, rotuloMercado, horaDaAposta, classificarAposta, emJogoDe, saldoDaSemana,
   type Registro, type SugLiquidada, type EstadoAposta,
 } from '../dados';
 
@@ -43,10 +43,10 @@ export function Apostas({
   const nVermelha = vivas.filter((v) => v.estado === 'perdeu').length;
   const saldoSemana = saldoDaSemana(registros);
 
-  // Banca em DUAS CAMADAS. "Em jogo" é DERIVADO (não gravado): soma dos stakes das apostas ainda
-  // não resolvidas (pendente/aguardando — ambas têm resultado='pendente' no banco). Disponível é o
-  // que sobra. Quando o resultado é confirmado, a aposta sai de pendente e sai do "em jogo" sozinha.
-  const emJogo = +registros.filter((r) => r.resultado === 'pendente').reduce((s, r) => s + r.stake_real, 0).toFixed(2);
+  // Banca em DUAS CAMADAS. "Em jogo" é DERIVADO (soma dos stakes pendentes); disponível é o resto.
+  // Confirmar o resultado tira a aposta de pendente e ela sai do "em jogo" sozinha. Mesma fonte
+  // que alimenta o chip da banca no header.
+  const emJogo = emJogoDe(registros);
   const disponivel = +(banca - emJogo).toFixed(2);
 
   if (!vivas.length) {
@@ -91,21 +91,6 @@ export function Apostas({
       ))}
     </div>
   );
-}
-
-/** Saldo resolvido (ganhou/perdeu) na semana corrente (segunda→domingo, horário de SP). */
-function saldoDaSemana(registros: Registro[]): number {
-  const agoraSP = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
-  const diaSemana = (agoraSP.getDay() + 6) % 7; // 0 = segunda
-  const inicio = new Date(agoraSP); inicio.setHours(0, 0, 0, 0); inicio.setDate(agoraSP.getDate() - diaSemana);
-  let saldo = 0;
-  for (const r of registros) {
-    if (r.resultado !== 'ganhou' && r.resultado !== 'perdeu') continue;
-    const quando = r.resolvido_em ?? r.registrado_em;
-    if (new Date(quando) < inicio) continue;
-    saldo += r.resultado === 'ganhou' ? r.retorno_rs - r.stake_real : -r.stake_real;
-  }
-  return +saldo.toFixed(2);
 }
 
 const ESTILO: Record<EstadoAposta, { borda: string; tag: string; rotulo: string }> = {

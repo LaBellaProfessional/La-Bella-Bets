@@ -132,6 +132,25 @@ export function horaDaAposta(r: Registro): string {
   return r.pernas.map((p) => p.hora ?? '').filter(Boolean).sort()[0] ?? '';
 }
 
+/** "Em jogo": soma dos stakes das apostas ainda não resolvidas (derivado, sem estado novo). */
+export function emJogoDe(registros: Registro[]): number {
+  return +registros.filter((r) => r.resultado === 'pendente').reduce((s, r) => s + r.stake_real, 0).toFixed(2);
+}
+
+/** Saldo resolvido (ganhou/perdeu) na semana corrente (segunda→domingo, horário de SP). */
+export function saldoDaSemana(registros: Registro[]): number {
+  const agoraSP = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const diaSemana = (agoraSP.getDay() + 6) % 7; // 0 = segunda
+  const inicio = new Date(agoraSP); inicio.setHours(0, 0, 0, 0); inicio.setDate(agoraSP.getDate() - diaSemana);
+  let saldo = 0;
+  for (const r of registros) {
+    if (r.resultado !== 'ganhou' && r.resultado !== 'perdeu') continue;
+    if (new Date(r.resolvido_em ?? r.registrado_em) < inicio) continue;
+    saldo += r.resultado === 'ganhou' ? r.retorno_rs - r.stake_real : -r.stake_real;
+  }
+  return +saldo.toFixed(2);
+}
+
 export type EstadoAposta = 'pendente' | 'aguardando' | 'ganhou' | 'perdeu' | 'cancelada';
 
 export interface SugLiquidada { status: string; gols_casa: number | null; gols_fora: number | null }
