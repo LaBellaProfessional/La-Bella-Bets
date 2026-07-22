@@ -26,3 +26,12 @@ body { overflow-wrap: break-word; }
   select,
   textarea { font-size: 16px !important; }
 }
+
+/* SAFE AREA (modo standalone / PWA).
+   Com viewport-fit=cover e a status bar translúcida, o conteúdo vai de ponta a ponta e o
+   header fica POR BAIXO do relógio / Dynamic Island. env(safe-area-inset-*) devolve o quanto
+   o iOS reserva pra essas áreas (0 em navegador comum e em telas sem notch, então não muda
+   nada fora do standalone). O padding vai no header (o fundo dele preenche a faixa da barra)
+   e no fim da página (pro gesto de home não encostar no último botão). */
+.safe-top { padding-top: env(safe-area-inset-top); }
+.safe-bottom { padding-bottom: calc(env(safe-area-inset-bottom) + 4rem); }

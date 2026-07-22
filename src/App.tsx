@@ -85,7 +85,7 @@ function Dash() {
 
   return (
     <div className="min-h-screen bg-fundo">
-      <header className="sticky top-0 z-10 border-b border-borda bg-fundo/95 backdrop-blur">
+      <header className="safe-top sticky top-0 z-10 border-b border-borda bg-fundo/95 backdrop-blur">
         <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-2 px-4 py-3">
           <span className="text-lg font-bold tracking-tight text-t1">
             BELLA<span className="text-rosa">BETS</span>
@@ -102,7 +102,10 @@ function Dash() {
           >
             Bootstrap
           </button>
-          {datas && datas.length > 0 && (
+          {/* Seletor de data só onde faz sentido escolher um dia: Análises e Histórico. Na
+              Início ele era redundante — a aba já mostra a janela inteira, um dia por bloco —
+              e dava a impressão falsa de que trocar a data mudaria a lista. */}
+          {datas && datas.length > 0 && (aba === 'analises' || aba === 'historico') && (
             <select
               value={data ?? ''} onChange={(e) => setDataSel(e.target.value)}
               className="rounded border border-borda bg-card px-2 py-1 text-xs text-t2 outline-none"
@@ -127,7 +130,7 @@ function Dash() {
         </nav>
       </header>
 
-      <main className="mx-auto max-w-4xl px-4 py-5 pb-16">
+      <main className="safe-bottom mx-auto max-w-4xl px-4 py-5">
         {erroQuery && (
           <div className="mb-4 rounded-lg border border-vermelho/40 bg-vermelho/10 px-4 py-3 text-sm text-vermelho">
             <b>Falha ao carregar dados.</b> {(erroQuery as Error).message}
