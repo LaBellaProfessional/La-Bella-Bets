@@ -116,7 +116,8 @@ export function lambdaEscanteios({ casa, fora, escanteios, h2hEsc, pesos }) {
  * houver histórico de acerto pra calibrar.
  */
 export function pernasEscanteios({ jogo, escanteios, h2hEsc, pesos, filtros, banca, stakePct }) {
-  const probMin = filtros.escanteios_prob_minima ?? 0.62;
+  // Formato unificado: escanteios_prob_minima gravado em % inteiro (62). Motor usa fração.
+  const probMin = (filtros.escanteios_prob_minima ?? 62) / 100;
   const amostraMin = filtros.escanteios_amostra_minima ?? 6;
   const est = lambdaEscanteios({ casa: jogo.casa, fora: jogo.fora, escanteios, h2hEsc, pesos });
 

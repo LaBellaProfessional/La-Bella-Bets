@@ -28,8 +28,19 @@ export function avaliarPerna({ jogo, mercado, odd, probH, probDC, probPush, amos
 
   // MANDO CURTO: descarta só abaixo do mínimo absoluto. Entre o mínimo e o pleno a perna
   // segue avaliada, com o peso do mando já rebaixado na heurística e a confiança limitada.
-  const mandoMinimo = filtros.mando_minimo ?? filtros.amostra_minima_mando ?? 5;
+  const mandoMinimo = filtros.mando_minimo ?? 5;
   const mandoPleno = filtros.mando_pleno ?? 7;
+
+  // FORMATO UNIFICADO (22/07): os filtros de natureza percentual são gravados em % INTEIRO
+  // (ev_minimo 3, ev_teto_suspeito 35, confianca_maxima_ev 6, confianca_maxima_prob 80). O motor
+  // converte aqui pro número que a conta usa — multiplicador de EV (1+x/100) ou fração (x/100).
+  // divergencia_maxima_pp e ah_vantagem_minima_pp já são p.p., não passam por aqui. As mensagens
+  // recebem os valores JÁ convertidos, então o texto na tela Análises não muda.
+  const evMin = 1 + (filtros.ev_minimo ?? 3) / 100;
+  const evTeto = (filtros.ev_teto_suspeito ?? 35) / 100;
+  const cmEv = (filtros.confianca_maxima_ev ?? 6) / 100;
+  const cmProb = (filtros.confianca_maxima_prob ?? 80) / 100;
+
   if (amostraMando < mandoMinimo)
     return { ...base, aprovada: false, motivo: MOTIVO.AMOSTRA(amostraMando, mandoMinimo) };
 
@@ -51,8 +62,8 @@ export function avaliarPerna({ jogo, mercado, odd, probH, probDC, probPush, amos
   const pPush = mercado === 'ah_casa_m10' ? (probPush ?? 0) : 0;
   const ev = probFinal * (1 - pPush) * odd + pPush;
 
-  if (ev < filtros.ev_minimo)
-    return { ...base, aprovada: false, motivo: MOTIVO.EV_NEGATIVO(ev, filtros.ev_minimo), prob_final: probFinal, ev };
+  if (ev < evMin)
+    return { ...base, aprovada: false, motivo: MOTIVO.EV_NEGATIVO(ev, evMin), prob_final: probFinal, ev };
 
   // TRAVA 1 — handicap sem matriz de placares é chute. É o mercado de maior variância do
   // sistema; sem Dixon-Coles não há segundo modelo pra conferir, e a heurística sozinha, em
@@ -63,17 +74,17 @@ export function avaliarPerna({ jogo, mercado, odd, probH, probDC, probPush, amos
   // TRAVA 2 — EV implausível. Casa de aposta profissional não deixa 40% de valor na mesa em
   // mercado popular: EV assim é erro de modelo, odd defasada ou amostra viciada — não é edge.
   // Descartar é o comportamento correto; perseguir esse número é como o método se perde.
-  if (ev - 1 > filtros.ev_teto_suspeito)
-    return { ...base, aprovada: false, motivo: MOTIVO.EV_SUSPEITO(ev, filtros.ev_teto_suspeito), prob_final: probFinal, ev };
+  if (ev - 1 > evTeto)
+    return { ...base, aprovada: false, motivo: MOTIVO.EV_SUSPEITO(ev, evTeto), prob_final: probFinal, ev };
 
   // Amostra curta NUNCA vira confiança máxima: o dado é mais fino, o stake tem que ser o padrão.
   const amostraCurta = amostraMando < mandoPleno;
   const maxima =
     !amostraCurta &&
     temDC &&
-    probH >= filtros.confianca_maxima_prob &&
-    probDC >= filtros.confianca_maxima_prob &&
-    ev - 1 >= filtros.confianca_maxima_ev;
+    probH >= cmProb &&
+    probDC >= cmProb &&
+    ev - 1 >= cmEv;
 
   return {
     ...base,

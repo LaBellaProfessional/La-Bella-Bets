@@ -93,7 +93,8 @@ Deno.serve(async (req) => {
       ...(cfg.mercados_em_bilhete as string[]).filter((m: string) => !/^(over|under)_/.test(m)),
       'ah_casa_m05', 'ah_casa_m10', 'ah_fora_p05',
     ];
-    const evAntecipado = Number((cfg.filtros as any).ev_minimo_antecipado ?? 1.06);
+    // Formato unificado: ev_minimo_antecipado gravado em % inteiro (6). Motor usa multiplicador.
+    const evAntecipado = 1 + Number((cfg.filtros as any).ev_minimo_antecipado ?? 6) / 100;
 
     const base = (corpo.data as string) ?? hojeSP();
     const nDias = corpo.data ? 1 : Number(corpo.dias ?? (cfg.filtros as any).dias_janela ?? 4);
