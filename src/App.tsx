@@ -1,19 +1,22 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { Login } from './Login';
 import {
   useConfig, useDatas, useAnalise, useBilhetes, useSugestoes,
-  useDefinirResultado, useSalvarConfig, useRodarMotor, useJanelaCompleta, useRegistrarEntrada,
+  useAlterarResultado, useSalvarConfig, useRodarMotor, useJanelaCompleta, useRegistrarEntrada,
+  useRascunhos, useSalvarRascunho, indiceSugestoes, classificarAposta,
 } from './dados';
 import { Inicio } from './telas/Inicio';
+import { Apostas } from './telas/Apostas';
 import { Analises } from './telas/Analises';
 import { Historico } from './telas/Historico';
 import { Configuracoes } from './telas/Configuracoes';
 
-type Aba = 'inicio' | 'analises' | 'historico' | 'config';
+type Aba = 'inicio' | 'apostas' | 'analises' | 'historico' | 'config';
 const ABAS: { id: Aba; nome: string }[] = [
   { id: 'inicio', nome: 'Início' },
+  { id: 'apostas', nome: 'Apostas' },
   { id: 'analises', nome: 'Análises' },
   { id: 'historico', nome: 'Histórico' },
   { id: 'config', nome: 'Config' },
@@ -56,15 +59,24 @@ function Dash() {
   const analise = qAnalise.data;
   const { data: bilhetes } = useBilhetes();
   const { data: sugestoes } = useSugestoes();
+  const { data: rascunhos } = useRascunhos();
   const qJanela = useJanelaCompleta(hojeISO);
   const janela = qJanela.data;
+
+  // Índice da liquidação virtual → pré-sugestão das apostas pendentes + badge de "aguardando".
+  const sugIndex = useMemo(() => indiceSugestoes(sugestoes), [sugestoes]);
+  const nAguardando = useMemo(
+    () => (bilhetes ?? []).filter((b) => classificarAposta(b, sugIndex).estado === 'aguardando').length,
+    [bilhetes, sugIndex],
+  );
 
   // Falha de consulta NAO pode virar tela vazia: sem isso, 'sem dado' e 'sem conexao'
   // ficam iguais na tela e o diagnostico vira advinhacao.
   const erroQuery = qConfig.error ?? qDatas.error ?? qAnalise.error;
 
   const registrar = useRegistrarEntrada();
-  const definirResultado = useDefinirResultado();
+  const alterarResultado = useAlterarResultado();
+  const salvarRascunho = useSalvarRascunho();
   const salvarConfig = useSalvarConfig();
   const motor = useRodarMotor();
   const [aviso, setAviso] = useState<string | null>(null);
@@ -120,11 +132,17 @@ function Dash() {
           {ABAS.map((a) => (
             <button
               key={a.id} onClick={() => setAba(a.id)}
-              className={`px-3 py-2 text-sm transition-colors ${
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm transition-colors ${
                 aba === a.id ? 'border-b-2 border-rosa font-semibold text-t1' : 'text-t3 hover:text-t2'
               }`}
             >
               {a.nome}
+              {/* Badge = nº de apostas aguardando confirmação (jogo acabou, falta o dedo). */}
+              {a.id === 'apostas' && nAguardando > 0 && (
+                <span className="rounded-full bg-ambar px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">
+                  {nAguardando}
+                </span>
+              )}
             </button>
           ))}
         </nav>
@@ -142,10 +160,20 @@ function Dash() {
             config={config}
             carregando={qJanela.isLoading}
             jaRegistrados={bilhetes ?? []}
+            rascunhos={rascunhos ?? new Map()}
             // mutateAsync (e não mutate): o card precisa do erro pra mostrar na tela.
             // Com mutate, a falha morre no estado do hook e a tela finge que nada aconteceu.
             onRegistrar={(e) => registrar.mutateAsync(e)}
+            onSalvarRascunho={(r) => salvarRascunho.mutate(r)}
             onAnalisar={() => rodar('analisar')}
+          />
+        )}
+        {aba === 'apostas' && config && (
+          <Apostas
+            registros={bilhetes ?? []}
+            sugIndex={sugIndex}
+            banca={config.banca}
+            onAlterar={(registro, novo) => alterarResultado.mutateAsync({ registro, novo, banca: config.banca })}
           />
         )}
         {aba === 'analises' && <Analises analise={analise ?? null} />}
@@ -156,7 +184,7 @@ function Dash() {
             sugestoes={sugestoes ?? []}
             onResultado={(id: string, r: 'ganhou' | 'perdeu') => {
               const reg = (bilhetes ?? []).find((x) => x.id === id);
-              if (reg) definirResultado.mutate({ registro: reg, resultado: r, banca: config.banca });
+              if (reg) alterarResultado.mutate({ registro: reg, novo: r, banca: config.banca });
             }}
           />
         )}

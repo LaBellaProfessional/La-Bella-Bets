@@ -14,7 +14,9 @@ export function Historico({
   sugestoes: SugestaoLiquidada[];
   onResultado: (id: string, r: 'ganhou' | 'perdeu') => void;
 }) {
-  const fechados = registros.filter((r) => r.resultado !== 'pendente');
+  // Cancelada ("não apostei") não é aposta real: fora de toda estatística e da lista.
+  const reais = registros.filter((r) => r.resultado !== 'cancelada');
+  const fechados = reais.filter((r) => r.resultado === 'ganhou' || r.resultado === 'perdeu');
   const ganhos = fechados.filter((r) => r.resultado === 'ganhou');
   const investido = fechados.reduce((s, r) => s + r.stake_rs, 0);
   const retorno = fechados.reduce((s, r) => s + r.retorno_rs, 0);
@@ -53,7 +55,7 @@ export function Historico({
         <Kpi rotulo="Lucro" valor={brl(lucro)} cor={lucro >= 0 ? 'text-verde' : 'text-vermelho'} />
         <Kpi rotulo="ROI" valor={`${roi.toFixed(1)}%`} cor={roi >= 0 ? 'text-verde' : 'text-vermelho'} />
         <Kpi rotulo="Acerto" valor={`${acerto.toFixed(0)}%`} />
-        <Kpi rotulo="Bilhetes" valor={`${fechados.length}`} sub={`${registros.length - fechados.length} pendentes`} />
+        <Kpi rotulo="Bilhetes" valor={`${fechados.length}`} sub={`${reais.length - fechados.length} pendentes`} />
         <Kpi rotulo="Pior sequência" valor={`${piorNeg} ✗`} sub={seqTipo ? `atual: ${seqAtual} ${seqTipo === 'ganhou' ? '✓' : '✗'}` : undefined} />
       </div>
 
@@ -61,11 +63,11 @@ export function Historico({
 
       <div className="overflow-hidden rounded-xl border border-borda bg-card">
         <div className="border-b border-borda px-4 py-3 text-xs uppercase tracking-widest text-t3">Bilhetes registrados</div>
-        {registros.length === 0 ? (
+        {reais.length === 0 ? (
           <div className="px-4 py-8 text-center text-sm text-t3">Nenhum bilhete registrado ainda.</div>
         ) : (
           <div className="divide-y divide-borda/60">
-            {[...registros].reverse().map((r) => (
+            {[...reais].reverse().map((r) => (
               <div key={r.id} className="px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm text-t2">{r.data} · @ {r.odd_total.toFixed(2)} · {brl(r.stake_rs)}</span>
