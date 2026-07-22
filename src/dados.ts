@@ -77,10 +77,53 @@ export interface Analise {
 
 export interface Registro {
   id: string; data: string; registrado_em: string;
-  pernas: { partida: string; mercado: string; rotulo?: string; odd: number | null }[];
+  pernas: { partida: string; mercado: string; rotulo?: string; odd: number | null; hora?: string | null }[];
   odd_total: number; odd_referencia?: number | null; casa_odd?: string | null; prob_combinada: number; ev_pct: number;
-  stake_real: number; resultado: 'pendente' | 'ganhou' | 'perdeu';
-  retorno_rs: number; banca_depois: number | null;
+  stake_real: number; resultado: 'pendente' | 'ganhou' | 'perdeu' | 'cancelada';
+  retorno_rs: number; banca_depois: number | null; resolvido_em?: string | null;
+}
+
+/**
+ * Identidade de uma entrada: dia + conjunto de (partida, mercado) ordenado. É o mesmo critério
+ * que a Início usa pra saber o que já foi registrado — e a chave do rascunho persistente.
+ * Odd é valor variável; partida+mercado é o que identifica a aposta (lição do bug de 21/07).
+ */
+export const chaveEntrada = (data: string, pernas: { partida: string; mercado: string }[]) =>
+  `${data}|${pernas.map((p) => `${p.partida}·${p.mercado}`).sort().join('+')}`;
+
+/** Primeiro horário da aposta (menor hora entre as pernas), pra ordenar pendentes. */
+export function horaDaAposta(r: Registro): string {
+  return r.pernas.map((p) => p.hora ?? '').filter(Boolean).sort()[0] ?? '';
+}
+
+export type EstadoAposta = 'pendente' | 'aguardando' | 'ganhou' | 'perdeu' | 'cancelada';
+
+export interface SugLiquidada { status: string; gols_casa: number | null; gols_fora: number | null }
+
+/**
+ * Estado operacional da aposta na aba Apostas. Para as PENDENTES, consulta a liquidação
+ * virtual (sugestoes_liquidadas, casada por data+partida+mercado): se todo jogo da aposta já
+ * encerrou, vira 'aguardando' com uma PRÉ-SUGESTÃO ("Terminou 2x1 — indica GANHOU"). Enquanto
+ * qualquer perna não tiver placar, continua 'pendente'. A confirmação (que move a banca)
+ * continua manual — a pré-sugestão só adianta o dedo.
+ */
+export function classificarAposta(
+  b: Registro,
+  sug: Map<string, SugLiquidada>,
+): { estado: EstadoAposta; pre?: { resultado: 'ganhou' | 'perdeu'; placar: string } } {
+  if (b.resultado !== 'pendente') return { estado: b.resultado };
+  const chaves = b.pernas.map((p) => `${b.data}|${p.partida}|${p.mercado}`);
+  const casadas = chaves.map((k) => sug.get(k));
+  if (casadas.some((m) => !m || m.status === 'pendente')) return { estado: 'pendente' };
+  const resultado: 'ganhou' | 'perdeu' = casadas.every((m) => m!.status === 'ganhou') ? 'ganhou' : 'perdeu';
+  // Placar por jogo (uma aposta pode cruzar dois jogos): "2x1" simples, "Casa 2x1 · Outro 0x0".
+  const porJogo = new Map<string, SugLiquidada>();
+  b.pernas.forEach((p, i) => { if (casadas[i] && !porJogo.has(p.partida)) porJogo.set(p.partida, casadas[i]!); });
+  const jogos = [...porJogo.entries()];
+  const placar = jogos.length === 1
+    ? `${jogos[0][1].gols_casa}x${jogos[0][1].gols_fora}`
+    : jogos.map(([part, m]) => `${part.split(' x ')[0]} ${m.gols_casa}x${m.gols_fora}`).join(' · ');
+  return { estado: 'aguardando', pre: { resultado, placar } };
 }
 
 export interface Config {
@@ -172,23 +215,86 @@ export function useRegistrarBilhete() {
   });
 }
 
-export function useDefinirResultado() {
+/**
+ * Altera o resultado de uma aposta em QUALQUER estado e ajusta a banca de forma reversível.
+ *
+ * A banca é um número corrente único (config.banca). Para permitir "corrigir resultado" sem
+ * duplicar efeito, o cálculo é sempre DELTA_NOVO − DELTA_ANTERIOR:
+ *   · ganhou  → +stake·(odd−1)   (lucro líquido)
+ *   · perdeu  → −stake
+ *   · pendente/cancelada → 0     (não mexe em dinheiro)
+ * Assim ganhou→perdeu, perdeu→cancelada, etc. sempre reconstroem a banca certa.
+ * "Não apostei"/"desfazer" gravam 'cancelada' (a linha fica pra auditoria, não é deletada).
+ * Toda transição é registrada em bilhete_eventos com timestamp (best-effort).
+ */
+export function useAlterarResultado() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ registro, resultado, banca }: { registro: Registro; resultado: 'ganhou' | 'perdeu'; banca: number }) => {
-      const retorno = resultado === 'ganhou' ? +(registro.stake_real * registro.odd_total).toFixed(2) : 0;
-      const bancaDepois = +(banca + retorno - registro.stake_real).toFixed(2);
+    mutationFn: async ({ registro, novo, banca }: { registro: Registro; novo: 'ganhou' | 'perdeu' | 'cancelada'; banca: number }) => {
+      const deltaDe = (res: string, retorno: number, stake: number) =>
+        res === 'ganhou' ? retorno - stake : res === 'perdeu' ? -stake : 0;
+
+      const deltaAnterior = deltaDe(registro.resultado, registro.retorno_rs, registro.stake_real);
+      const retornoNovo = novo === 'ganhou' ? +(registro.stake_real * registro.odd_total).toFixed(2) : 0;
+      const deltaNovo = deltaDe(novo, retornoNovo, registro.stake_real);
+      const bancaDepois = +(banca - deltaAnterior + deltaNovo).toFixed(2);
+
       const { error } = await supabase.from('bilhetes').update({
-        resultado, retorno_rs: retorno, banca_depois: bancaDepois, resolvido_em: new Date().toISOString(),
+        resultado: novo,
+        retorno_rs: retornoNovo,
+        // Cancelada não é um resultado resolvido: zera o carimbo de banca/resolução.
+        banca_depois: novo === 'cancelada' ? null : bancaDepois,
+        resolvido_em: novo === 'cancelada' ? null : new Date().toISOString(),
       }).eq('id', registro.id);
       if (error) throw error;
-      // A banca só muda aqui: registrar o resultado é o ato que move dinheiro de verdade.
-      const { error: e2 } = await supabase.from('config').update({ banca: bancaDepois }).eq('id', 1);
-      if (e2) throw e2;
+
+      // A banca só muda quando o delta muda de fato.
+      if (deltaNovo !== deltaAnterior) {
+        const { error: e2 } = await supabase.from('config').update({ banca: bancaDepois }).eq('id', 1);
+        if (e2) throw e2;
+      }
+
+      // Auditoria — acessório, não pode derrubar a operação principal.
+      try {
+        await supabase.from('bilhete_eventos').insert({ bilhete_id: registro.id, de: registro.resultado, para: novo });
+      } catch { /* rastro é best-effort */ }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['bilhetes'] });
       qc.invalidateQueries({ queryKey: ['config'] });
+    },
+  });
+}
+
+/* ─────────────────────────── RASCUNHO PERSISTENTE ─────────────────────────── */
+
+export interface Rascunho {
+  chave: string; data: string; partida: string | null; mercado: string | null;
+  odd_casa: string | null; stake: number | null; atualizado_em: string;
+}
+
+/**
+ * Rascunhos dos campos da Início. Best-effort: se a tabela ainda não existir (migração não
+ * aplicada), devolve mapa vazio em vez de derrubar a tela. Ignora rascunhos com mais de 48h
+ * mesmo antes do cron de limpeza rodar.
+ */
+export function useRascunhos() {
+  return useQuery<Map<string, Rascunho>>({
+    queryKey: ['rascunhos'],
+    queryFn: async () => {
+      const corte = new Date(Date.now() - 48 * 3600 * 1000).toISOString();
+      const { data, error } = await supabase.from('rascunhos').select('*').gte('atualizado_em', corte);
+      if (error) return new Map();
+      return new Map((data ?? []).map((r) => [r.chave as string, r as Rascunho]));
+    },
+  });
+}
+
+export function useSalvarRascunho() {
+  // Fire-and-forget: não invalida (evita re-render a cada tecla). O rascunho só é lido no mount.
+  return useMutation({
+    mutationFn: async (r: { chave: string; data: string; partida: string | null; mercado: string | null; odd_casa: string; stake: number }) => {
+      await supabase.from('rascunhos').upsert({ ...r, atualizado_em: new Date().toISOString() }, { onConflict: 'chave' });
     },
   });
 }
@@ -234,6 +340,16 @@ export interface SugestaoLiquidada {
   odd_referencia: number; odd_e_mercado: boolean; prob_modelo: number;
   confianca: string; radar: boolean;
   status: 'pendente' | 'ganhou' | 'perdeu';
+  gols_casa: number | null; gols_fora: number | null;
+}
+
+/** Índice das sugestões liquidadas por data|partida|mercado — base da pré-sugestão da aba Apostas. */
+export function indiceSugestoes(sugestoes: SugestaoLiquidada[] | undefined): Map<string, SugLiquidada> {
+  const m = new Map<string, SugLiquidada>();
+  for (const s of sugestoes ?? []) {
+    m.set(`${s.data}|${s.partida}|${s.mercado}`, { status: s.status, gols_casa: s.gols_casa, gols_fora: s.gols_fora });
+  }
+  return m;
 }
 
 /** Sugestões liquidadas + pendentes. A agregação (calibração, ROI virtual) é feita na tela. */
@@ -243,7 +359,7 @@ export function useSugestoes() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('sugestoes_liquidadas')
-        .select('id,data,partida,liga,mercado,rotulo,familia,linha,odd_referencia,odd_e_mercado,prob_modelo,confianca,radar,status')
+        .select('id,data,partida,liga,mercado,rotulo,familia,linha,odd_referencia,odd_e_mercado,prob_modelo,confianca,radar,status,gols_casa,gols_fora')
         .order('data', { ascending: false });
       if (error) throw error;
       return (data ?? []) as SugestaoLiquidada[];
@@ -293,7 +409,9 @@ export function useRegistrarEntrada() {
     }) => {
       const { error } = await supabase.from('bilhetes').insert({
         data: e.data,
-        pernas: e.pernas.map((p) => ({ partida: p.partida, mercado: p.mercado, rotulo: rotuloMercado(p.mercado), odd: p.odd })),
+        // `hora` vai junto no jsonb da perna: a aba Apostas ordena as pendentes por horário do
+        // jogo, e o bilhete não tinha onde guardar isso sem uma coluna nova.
+        pernas: e.pernas.map((p) => ({ partida: p.partida, mercado: p.mercado, rotulo: rotuloMercado(p.mercado), odd: p.odd, hora: p.hora ?? null })),
         n_pernas: e.pernas.length,
         odd_total: e.odd_real,             // a odd REAL da aposta
         odd_referencia: e.odd_referencia,  // a que o modelo viu — a diferenca e o CLV
@@ -308,7 +426,12 @@ export function useRegistrarEntrada() {
         confianca: e.pernas.every((p) => p.confianca === 'CONFIANCA_MAXIMA') ? 'maxima' : 'aprovada',
       });
       if (error) throw error;
+      // Registrou → o rascunho cumpriu o papel e morre (best-effort).
+      try { await supabase.from('rascunhos').delete().eq('chave', chaveEntrada(e.data, e.pernas)); } catch { /* ignora */ }
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['bilhetes'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bilhetes'] });
+      qc.invalidateQueries({ queryKey: ['rascunhos'] });
+    },
   });
 }
