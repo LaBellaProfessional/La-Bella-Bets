@@ -153,10 +153,13 @@ function DiaBloco({
     ...soltas.map((p, i) => ({ tipo: 'perna' as const, chave: `s${i}`, perna: p })),
   ];
 
-  // Entrada já registrada some da Início.
-  const entradas = entradasTodas.filter(
-    (e) => !registrados.has(chaveEntrada(analise.data, pernasDe(e))),
-  );
+  // INVARIANTE (bug 22/07): some da Início APENAS a entrada cuja chave — data + partida +
+  // mercado, ordenada — está registrada. NUNCA o jogo inteiro. É a MESMA chave do registrar e do
+  // rascunho. Consequências garantidas: registrar 1 de N entradas de um jogo deixa as outras N-1
+  // visíveis; o aviso de concentração e o badge de nota do card (Math.max abaixo) recalculam a
+  // partir das que sobraram; desfazer devolve só aquela entrada (a cancelada sai de `registrados`).
+  const entradaRegistrada = (e: Entrada) => registrados.has(chaveEntrada(analise.data, pernasDe(e)));
+  const entradas = entradasTodas.filter((e) => !entradaRegistrada(e));
 
   // Bilhete que atravessa dois jogos é uma aposta só, com dois riscos: card próprio.
   const combinadas = entradas.filter((e) => jogosDe(e).length > 1).sort((a, b) => notaOrd(b) - notaOrd(a));
