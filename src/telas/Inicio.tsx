@@ -1,20 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  brl, rotuloMercado, familiaDoMercado, NOME_FAMILIA,
-  type Analise, type Bilhete, type Config, type Perna, type Registro,
+  brl, rotuloMercado, familiaDoMercado, NOME_FAMILIA, chaveEntrada,
+  type Analise, type Bilhete, type Config, type Perna, type Registro, type Rascunho,
 } from '../dados';
 
 /**
- * ABA INÍCIO — a tela de decisão, organizada POR JOGO.
+ * ABA INÍCIO — a tela de DECISÃO, organizada POR JOGO.
  *
- * A versão anterior agrupava por mercado, e o efeito colateral era esconder a única coisa que
- * importa pro risco: três entradas diferentes podiam ser do MESMO jogo, espalhadas por três
- * blocos distintos da tela. Se aquele jogo desse errado, as três morriam juntas — e nada na
- * tela dizia isso. Agora cada partida é um card, e a concentração fica na cara.
+ * Cada partida é um card; cada entrada dentro do card tem seu próprio campo de odd e botão —
+ * a odd da casa do Maikon é diferente da odd de referência (europeia), e o veredito só existe
+ * depois que ele digita o número real.
  *
- * Cada entrada dentro do card tem seu próprio campo de odd e seu próprio botão: a odd da casa
- * do Maikon é diferente da odd de referência (europeia), e o veredito só existe depois que ele
- * digita o número real.
+ * Funil: Início decide · Apostas acompanha · Histórico analisa. Por isso uma entrada REGISTRADA
+ * some daqui (passa a viver na aba Apostas). O card do jogo continua enquanto tiver entrada não
+ * registrada; some quando todas foram registradas.
+ *
+ * Rascunho persistente: odd e stake digitados são salvos no Supabase (debounce ~1s), keyed pela
+ * identidade da entrada. No iPhone o PWA recarrega ao alternar apps — sem isso, o número perdido
+ * ao conferir a odd na casa e voltar. Ao reabrir, os campos voltam preenchidos.
  */
 
 const DIA_MS = 86400000;
@@ -45,26 +48,20 @@ export interface EntradaRegistro {
   prob: number; stake: number; casa_odd: string | null;
 }
 
-/**
- * Identidade de uma entrada: dia + conjunto de (partida, mercado).
- *
- * Era aqui que estava o bug do "Registrar não faz nada". A comparação antiga era pela ODD
- * (`registro.odd_referencia === perna.odd`), e escanteio não tem odd de referência: virava
- * `0 === null`, nunca casava, o card nunca mudava de estado. O insert acontecia toda vez —
- * o Maikon clicava de novo achando que tinha falhado e gravava duplicata. Dez, no dia 21/07.
- * Odd é valor variável; partida+mercado é o que identifica a aposta.
- */
-const chaveEntrada = (data: string, pernas: { partida: string; mercado: string }[]) =>
-  `${data}|${pernas.map((p) => `${p.partida}·${p.mercado}`).sort().join('+')}`;
+export interface SalvarRascunho {
+  (r: { chave: string; data: string; partida: string | null; mercado: string | null; odd_casa: string; stake: number }): void;
+}
 
 export function Inicio({
-  janela, config, carregando, jaRegistrados, onRegistrar, onAnalisar,
+  janela, config, carregando, jaRegistrados, rascunhos, onRegistrar, onSalvarRascunho, onAnalisar,
 }: {
   janela: Analise[];
   config?: Config;
   carregando?: boolean;
   jaRegistrados: Registro[];
+  rascunhos: Map<string, Rascunho>;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
+  onSalvarRascunho: SalvarRascunho;
   onAnalisar?: () => void;
 }) {
   if (carregando) return <Vazio titulo="Carregando…">Buscando as análises no servidor.</Vazio>;
@@ -81,14 +78,18 @@ export function Inicio({
     );
   }
 
+  // Registrada some da Início. Cancelada (desfeita) NÃO conta como registrada — volta a aparecer.
   const registrados = new Set(
-    (jaRegistrados ?? []).map((r) => chaveEntrada(r.data, r.pernas ?? [])),
+    (jaRegistrados ?? []).filter((r) => r.resultado !== 'cancelada').map((r) => chaveEntrada(r.data, r.pernas ?? [])),
   );
 
   return (
     <div className="space-y-6 overflow-x-hidden">
       {janela.map((a) => (
-        <DiaBloco key={a.data} analise={a} config={config} registrados={registrados} onRegistrar={onRegistrar} />
+        <DiaBloco
+          key={a.data} analise={a} config={config} registrados={registrados}
+          rascunhos={rascunhos} onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
+        />
       ))}
     </div>
   );
@@ -103,28 +104,32 @@ const pernasDe = (e: Entrada) => (e.tipo === 'bilhete' ? e.bilhete.pernas : [e.p
 const jogosDe = (e: Entrada) => [...new Set(pernasDe(e).map((p) => p.partida))];
 
 function DiaBloco({
-  analise, config, registrados, onRegistrar,
+  analise, config, registrados, rascunhos, onRegistrar, onSalvarRascunho,
 }: {
   analise: Analise; config?: Config;
   registrados: Set<string>;
+  rascunhos: Map<string, Rascunho>;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
+  onSalvarRascunho: SalvarRascunho;
 }) {
   const bilhetes = analise.bilhetes ?? [];
   const pernas = analise.pernas ?? [];
 
-  // Perna aprovada que não entrou em bilhete nenhum é entrada mesmo assim. O radar (D+1..D+3
-  // abaixo da margem exigida) fica de fora: ainda não é entrada, é observação.
   const emBilhete = new Set(bilhetes.flatMap((b) => b.pernas.map((p) => `${p.jogo_id}|${p.mercado}`)));
   const soltas = pernas.filter((p) => p.aprovada && !p.radar && !emBilhete.has(`${p.jogo_id}|${p.mercado}`));
   const radar = analise.radar ?? [];
 
-  const entradas: Entrada[] = [
+  const entradasTodas: Entrada[] = [
     ...bilhetes.map((b) => ({ tipo: 'bilhete' as const, chave: `b${b.ordem}`, bilhete: b })),
     ...soltas.map((p, i) => ({ tipo: 'perna' as const, chave: `s${i}`, perna: p })),
   ];
 
-  // Bilhete que atravessa dois jogos não pertence a nenhum card de partida: é uma aposta só,
-  // com dois riscos. Fica num card próprio, antes dos jogos.
+  // Entrada já registrada some da Início.
+  const entradas = entradasTodas.filter(
+    (e) => !registrados.has(chaveEntrada(analise.data, pernasDe(e))),
+  );
+
+  // Bilhete que atravessa dois jogos é uma aposta só, com dois riscos: card próprio.
   const combinadas = entradas.filter((e) => jogosDe(e).length > 1);
   const porJogo = new Map<string, Entrada[]>();
   for (const e of entradas) {
@@ -134,11 +139,12 @@ function DiaBloco({
     porJogo.get(k)!.push(e);
   }
 
-  // Ordem por horário: é a ordem em que as decisões precisam ser tomadas.
   const jogos = [...porJogo.entries()].sort(
     (a, b) => (pernasDe(a[1][0])[0].hora ?? '').localeCompare(pernasDe(b[1][0])[0].hora ?? ''),
   );
   const semEntrada = !combinadas.length && !jogos.length;
+  // Se sobrou nada visível E já havia entradas (todas registradas), não vira "sem entrada": some.
+  const tudoRegistrado = semEntrada && entradasTodas.length > 0;
 
   return (
     <section>
@@ -154,11 +160,19 @@ function DiaBloco({
 
       {semEntrada ? (
         <div className="rounded-xl border border-borda bg-card px-4 py-5 text-center">
-          <div className="text-sm font-medium text-t2">Sem entrada nesse dia</div>
+          <div className="text-sm font-medium text-t2">
+            {tudoRegistrado ? 'Tudo registrado nesse dia' : 'Sem entrada nesse dia'}
+          </div>
           <div className="mt-1 text-xs text-t3">
-            {analise.resumo?.jogos ?? 0} jogos e {analise.resumo?.pernas_avaliadas ?? 0} apostas possíveis analisadas ·{' '}
-            {analise.resumo?.aprovadas ?? 0} passaram nos filtros
-            {radar.length > 0 && ` · ${radar.length} no radar pra véspera`}
+            {tudoRegistrado ? (
+              'As entradas desse dia estão na aba Apostas.'
+            ) : (
+              <>
+                {analise.resumo?.jogos ?? 0} jogos e {analise.resumo?.pernas_avaliadas ?? 0} apostas possíveis analisadas ·{' '}
+                {analise.resumo?.aprovadas ?? 0} passaram nos filtros
+                {radar.length > 0 && ` · ${radar.length} no radar pra véspera`}
+              </>
+            )}
           </div>
         </div>
       ) : (
@@ -167,7 +181,7 @@ function DiaBloco({
             <CardJogo
               key={e.chave} data={analise.data} titulo={jogosDe(e).join('  +  ')}
               subtitulo={`bilhete combinado · ${jogosDe(e).length} jogos`}
-              entradas={[e]} config={config} registrados={registrados} onRegistrar={onRegistrar}
+              entradas={[e]} config={config} rascunhos={rascunhos} onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
             />
           ))}
           {jogos.map(([partida, lista]) => {
@@ -176,7 +190,7 @@ function DiaBloco({
               <CardJogo
                 key={partida} data={analise.data} titulo={partida}
                 subtitulo={[p0.liga, p0.hora].filter(Boolean).join(' · ')}
-                entradas={lista} config={config} registrados={registrados} onRegistrar={onRegistrar}
+                entradas={lista} config={config} rascunhos={rascunhos} onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
               />
             );
           })}
@@ -187,11 +201,12 @@ function DiaBloco({
 }
 
 function CardJogo({
-  data, titulo, subtitulo, entradas, config, registrados, onRegistrar,
+  data, titulo, subtitulo, entradas, config, rascunhos, onRegistrar, onSalvarRascunho,
 }: {
   data: string; titulo: string; subtitulo: string; entradas: Entrada[];
-  config?: Config; registrados: Set<string>;
+  config?: Config; rascunhos: Map<string, Rascunho>;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
+  onSalvarRascunho: SalvarRascunho;
 }) {
   const stakePctDe = (p: Perna) =>
     p.confianca === 'CONFIANCA_MAXIMA' && !p.amostra_curta
@@ -205,8 +220,6 @@ function CardJogo({
         <div className="text-sm font-semibold leading-snug text-t1 break-words">{titulo}</div>
         <div className="mt-0.5 text-xs text-t3">{subtitulo}</div>
         {entradas.length > 1 && (
-          // O aviso é o ponto do redesenho: duas entradas do mesmo jogo não são duas apostas
-          // independentes. Se o jogo virar, as duas viram junto.
           <div className="mt-2 rounded bg-ambar/10 px-2 py-1 text-[11px] leading-snug text-ambar">
             {entradas.length} entradas do mesmo jogo — resultado ruim afeta todas
           </div>
@@ -224,13 +237,7 @@ function CardJogo({
               key={e.chave}
               data={data}
               pernas={pernas}
-              // O TÍTULO É SEMPRE O MERCADO. Bilhete de UMA perna caía em "Entrada simples" e
-              // o mercado sumia: o card dizia "Entrada simples · GOLS" e nada mais — nem
-              // over/under, nem a linha. Quem lê não tinha como saber o que apostar na casa, e
-              // o erro só apareceria com o dinheiro na mesa. Bilhete de várias pernas nomeia
-              // todas, porque a aposta é o conjunto.
               rotulo={pernas.map((x) => rotuloMercado(x.mercado)).join('  +  ')}
-              // "entrada simples" / "bilhete" é o TIPO da aposta, nunca o nome dela.
               tipo={ehBilhete && e.bilhete.n_pernas > 1 ? `bilhete · ${e.bilhete.n_pernas} pernas` : 'entrada simples'}
               familia={NOME_FAMILIA[familiaDoMercado(pernas[0].mercado)]}
               oddReferencia={ehBilhete ? e.bilhete.odd_total : semOdd ? (p!.odd_justa ?? 0) : (p!.odd ?? 0)}
@@ -241,8 +248,9 @@ function CardJogo({
               confiancaMaxima={ehBilhete ? e.bilhete.todas_confianca_maxima : p!.confianca === 'CONFIANCA_MAXIMA' && !p!.amostra_curta}
               rebaixada={!ehBilhete && p!.confianca === 'REBAIXADA'}
               evMinimo={evMinimo}
-              jaRegistrado={registrados.has(chaveEntrada(data, pernas))}
+              rascunho={rascunhos.get(chaveEntrada(data, pernas))}
               onRegistrar={onRegistrar}
+              onSalvarRascunho={onSalvarRascunho}
             />
           );
         })}
@@ -253,42 +261,59 @@ function CardJogo({
 
 function LinhaEntrada({
   data, pernas, rotulo, tipo, familia, oddReferencia, prob, stakePct, stakeRS,
-  confiancaMaxima, rebaixada, evMinimo, semOdd, jaRegistrado, onRegistrar,
+  confiancaMaxima, rebaixada, evMinimo, semOdd, rascunho, onRegistrar, onSalvarRascunho,
 }: {
   data: string; pernas: Perna[]; rotulo: string; tipo: string; familia: string;
   oddReferencia: number; prob: number; stakePct: number; stakeRS: number;
   confiancaMaxima: boolean; rebaixada: boolean; evMinimo: number;
-  semOdd?: boolean; jaRegistrado: boolean;
+  semOdd?: boolean; rascunho?: Rascunho;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
+  onSalvarRascunho: SalvarRascunho;
 }) {
-  // Escanteios entram com o campo VAZIO de propósito: preencher com a odd justa convidaria a
-  // registrar o número do modelo como se fosse preço de casa — o erro que o CLV existe pra medir.
+  const chave = chaveEntrada(data, pernas);
   const [oddCasa, setOddCasa] = useState<string>(semOdd ? '' : oddReferencia.toFixed(2));
   const [stake, setStake] = useState<number>(stakeRS);
+  const [tocou, setTocou] = useState(false);
+  const [salvo, setSalvo] = useState(false);
   const [estado, setEstado] = useState<'ocioso' | 'enviando' | 'ok' | 'erro'>('ocioso');
   const [erro, setErro] = useState<string | null>(null);
 
+  // Restaura o rascunho quando ele chega do servidor — sem sobrescrever o que o usuário já digitou.
+  useEffect(() => {
+    if (tocou || !rascunho) return;
+    if (rascunho.odd_casa != null && rascunho.odd_casa !== '') setOddCasa(rascunho.odd_casa);
+    if (rascunho.stake != null) setStake(rascunho.stake);
+    if (rascunho.odd_casa || rascunho.stake != null) setSalvo(true);
+  }, [rascunho, tocou]);
+
+  // Salva o rascunho 1s depois de o usuário parar de digitar (debounce). Fire-and-forget.
+  useEffect(() => {
+    if (!tocou) return;
+    setSalvo(false);
+    const t = setTimeout(() => {
+      onSalvarRascunho({ chave, data, partida: pernas[0]?.partida ?? null, mercado: pernas.map((p) => p.mercado).join('+'), odd_casa: oddCasa, stake });
+      setSalvo(true);
+    }, 1000);
+    return () => clearTimeout(t);
+  }, [oddCasa, stake, tocou]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const odd = Number(oddCasa) || 0;
   const justo = prob > 0 ? 1 / prob : 0;
-  const valorNaOdd = prob * odd;           // 1.00 = pagou o justo
+  const valorNaOdd = prob * odd;
   const vale = valorNaOdd >= evMinimo;
   const ganho = (valorNaOdd - 1) * 100;
-  const registrado = jaRegistrado || estado === 'ok';
+  const registrado = estado === 'ok';
 
   async function registrar() {
     setEstado('enviando'); setErro(null);
     try {
       await onRegistrar({
         data, pernas, odd_real: odd,
-        // Sem odd de mercado não há referência de CLV: gravar a odd justa como se fosse a odd
-        // vista seria inventar um preço que ninguém publicou.
         odd_referencia: semOdd ? 0 : oddReferencia,
         prob, stake, casa_odd: pernas[0]?.casa_odd ?? null,
       });
       setEstado('ok');
     } catch (e) {
-      // Silenciar a falha foi metade do bug de 21/07: sem mensagem, "não gravou" e "gravou e
-      // não avisou" ficam idênticos na tela — e o clique se repete.
       setEstado('erro');
       setErro(e instanceof Error ? e.message : String(e));
     }
@@ -317,7 +342,6 @@ function LinhaEntrada({
         )}
       </div>
 
-      {/* Num bilhete, as pernas precisam aparecer: o card é do jogo, mas a aposta tem partes. */}
       {pernas.length > 1 && (
         <div className="mt-2 space-y-1">
           {pernas.map((p, i) => (
@@ -339,12 +363,13 @@ function LinhaEntrada({
           <span className="text-t2">Odd na sua casa</span>
           <input
             type="number" step="0.01" inputMode="decimal" value={oddCasa}
-            onChange={(e) => { setOddCasa(e.target.value); if (estado === 'erro') setEstado('ocioso'); }}
+            onChange={(e) => { setOddCasa(e.target.value); setTocou(true); if (estado === 'erro') setEstado('ocioso'); }}
             className="w-20 rounded border border-borda bg-card px-2 py-1 font-mono text-sm text-t1 outline-none focus:border-azul"
           />
           <span className="text-t3">
             {semOdd ? 'obrigatório' : `ref. @${oddReferencia.toFixed(2)}`}
           </span>
+          {salvo && <span className="text-[10px] text-t3">salvo ✓</span>}
         </div>
         <div className={`mt-1.5 text-xs leading-snug ${vale ? 'text-verde' : 'text-vermelho'}`}>
           {odd <= 1
@@ -360,7 +385,7 @@ function LinhaEntrada({
         <span className="text-xs text-t3">R$</span>
         <input
           type="number" step="0.01" inputMode="decimal" value={stake}
-          onChange={(e) => setStake(Number(e.target.value))}
+          onChange={(e) => { setStake(Number(e.target.value)); setTocou(true); }}
           className="w-20 rounded border border-borda bg-fundo px-2 py-1 text-sm text-t1 outline-none focus:border-azul"
         />
         <span className="text-[11px] text-t3">sugerido {brl(stakeRS)} ({stakePct}%)</span>
