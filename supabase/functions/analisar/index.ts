@@ -21,6 +21,7 @@ import { avaliarPerna } from '../_shared/filtros.js';
 import { montarBilhetes, cardsHandicap } from '../_shared/montador.js';
 import { contagensDoJogo } from '../_shared/narrativa.js';
 import { sugestaoDaPerna } from '../_shared/sugestoes.js';
+import { calcularNota } from '../_shared/nota.js';
 import {
   temChaves, gerarDemo, buscarJogosDoDia, buscarHistoricoTime,
   buscarOddsDosJogos, cota, limitacoesPlano,
@@ -277,6 +278,16 @@ Deno.serve(async (req) => {
           }
           pernas.push(p);
         }
+      }
+
+      // NOTA DE CONFIANÇA (0-100): determinística, atribuída a cada perna ANTES de montar os
+      // bilhetes, pra que as pernas dentro de um bilhete já carreguem a nota. Grava também os
+      // componentes pro detalhamento na tela.
+      const mandoPleno = (cfg.filtros as any).mando_pleno ?? 7;
+      for (const p of pernas) {
+        const { nota, componentes } = calcularNota(p, { mandoPleno });
+        p.nota = nota;
+        p.nota_componentes = componentes;
       }
 
       const aprovadas = pernas.filter((p) => p.aprovada);

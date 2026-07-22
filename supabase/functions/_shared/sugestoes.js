@@ -55,6 +55,9 @@ export function sugestaoDaPerna(p, data, snapshot = null) {
     confianca: normalizarConfianca(p.confianca),
     radar: Boolean(p.radar),
     horizonte_dias: p.horizonte_dias ?? 0,
+    // Nota de confiança + componentes, gravados na sugestão pra o corte por faixa na calibração.
+    nota: p.nota ?? null,
+    nota_componentes: p.nota_componentes ?? null,
     // Foto dos parâmetros que geraram ESTA sugestão. Quando formos testar variações de config
     // contra o histórico, é o que diz qual "versão do método" produziu cada resultado — sem
     // isso, um ROI de junho misturaria pesos que já mudaram e não provaria nada.
