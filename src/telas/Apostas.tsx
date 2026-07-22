@@ -43,6 +43,12 @@ export function Apostas({
   const nVermelha = vivas.filter((v) => v.estado === 'perdeu').length;
   const saldoSemana = saldoDaSemana(registros);
 
+  // Banca em DUAS CAMADAS. "Em jogo" é DERIVADO (não gravado): soma dos stakes das apostas ainda
+  // não resolvidas (pendente/aguardando — ambas têm resultado='pendente' no banco). Disponível é o
+  // que sobra. Quando o resultado é confirmado, a aposta sai de pendente e sai do "em jogo" sozinha.
+  const emJogo = +registros.filter((r) => r.resultado === 'pendente').reduce((s, r) => s + r.stake_real, 0).toFixed(2);
+  const disponivel = +(banca - emJogo).toFixed(2);
+
   if (!vivas.length) {
     return (
       <div className="rounded-xl border border-borda bg-card p-10 text-center">
@@ -56,6 +62,14 @@ export function Apostas({
     <div className="space-y-4 overflow-x-hidden">
       {/* RESUMO */}
       <div className="rounded-xl border border-borda bg-card px-4 py-3 text-sm">
+        {/* Banca em duas camadas: consolidada · em jogo (derivado) · disponível. */}
+        <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-borda pb-2">
+          <span className="text-t2">Banca <b className="text-t1">{brl(banca)}</b></span>
+          <span className="text-t3">·</span>
+          <span className="text-t2">Em jogo <b className={emJogo > 0 ? 'text-ambar' : 'text-t1'}>{brl(emJogo)}</b></span>
+          <span className="text-t3">·</span>
+          <span className="text-t2">Disponível <b className="text-verde">{brl(disponivel)}</b></span>
+        </div>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-t2">
           <b className="text-t1">{nPend}</b> {nPend === 1 ? 'pendente' : 'pendentes'}
           <span className="text-t3">·</span>

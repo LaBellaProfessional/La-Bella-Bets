@@ -87,12 +87,14 @@ export function Inicio({
   const registrados = new Set(
     (jaRegistrados ?? []).filter((r) => r.resultado !== 'cancelada').map((r) => chaveEntrada(r.data, r.pernas ?? [])),
   );
+  // "Em jogo" por dia: apostas ainda não resolvidas, pra medir o teto de risco diário consumido.
+  const pendentes = (jaRegistrados ?? []).filter((r) => r.resultado === 'pendente');
 
   return (
     <div className="space-y-6 overflow-x-hidden">
       {janela.map((a) => (
         <DiaBloco
-          key={a.data} analise={a} config={config} registrados={registrados}
+          key={a.data} analise={a} config={config} registrados={registrados} registrosPendentes={pendentes}
           rascunhos={rascunhos} onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
         />
       ))}
@@ -115,10 +117,11 @@ const jogosDe = (e: Entrada) => [...new Set(pernasDe(e).map((p) => p.partida))];
 interface InfoNota { nota: number | null; comp: NotaComponentes | null; escanteio: boolean }
 
 function DiaBloco({
-  analise, config, registrados, rascunhos, onRegistrar, onSalvarRascunho,
+  analise, config, registrados, registrosPendentes, rascunhos, onRegistrar, onSalvarRascunho,
 }: {
   analise: Analise; config?: Config;
   registrados: Set<string>;
+  registrosPendentes: Registro[];
   rascunhos: Map<string, Rascunho>;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
   onSalvarRascunho: SalvarRascunho;
@@ -185,6 +188,11 @@ function DiaBloco({
   const semEntrada = !combinadas.length && !jogos.length;
   const tudoRegistrado = semEntrada && entradasTodas.length > 0;
 
+  // Exposição do dia: quanto do teto de risco diário (8% da banca) já está EM JOGO neste dia.
+  const emJogoDia = +registrosPendentes.filter((r) => r.data === analise.data).reduce((s, r) => s + r.stake_real, 0).toFixed(2);
+  const tetoRs = (config?.banca ?? 0) * (config?.teto_exposicao_diaria_pct ?? 8) / 100;
+  const pctTeto = tetoRs > 0 ? Math.min(100, (emJogoDia / tetoRs) * 100) : 0;
+
   return (
     <section>
       <div className="mb-3 flex flex-wrap items-baseline gap-2">
@@ -196,6 +204,18 @@ function DiaBloco({
           </span>
         )}
       </div>
+
+      {emJogoDia > 0 && (
+        <div className="mb-3 rounded-lg border border-borda bg-card px-3 py-2">
+          <div className="flex items-baseline justify-between text-[11px]">
+            <span className="text-t2">Em jogo neste dia: <b className="text-ambar">{brl(emJogoDia)}</b></span>
+            <span className="text-t3">{pctTeto.toFixed(0)}% do teto de {config?.teto_exposicao_diaria_pct ?? 8}% ({brl(tetoRs)})</span>
+          </div>
+          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-fundo">
+            <div className={`h-full rounded-full ${pctTeto >= 100 ? 'bg-vermelho' : 'bg-ambar'}`} style={{ width: `${pctTeto}%` }} />
+          </div>
+        </div>
+      )}
 
       {semEntrada ? (
         <div className="rounded-xl border border-borda bg-card px-4 py-5 text-center">
