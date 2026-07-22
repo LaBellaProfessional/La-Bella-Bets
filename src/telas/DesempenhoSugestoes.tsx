@@ -111,6 +111,7 @@ export function DesempenhoSugestoes({ sugestoes }: { sugestoes: SugestaoLiquidad
             </div>
           </div>
 
+          <QuebraFaixaNota sugestoes={sugestoes} />
           <Quebra titulo="Por mercado" grupos={porChave(sugestoes, (r) => r.familia)} nomear={(k) => NOME_FAMILIA[k as Familia]} />
           <Quebra titulo="Por confiança" grupos={porChave(sugestoes, (r) => r.confianca)} nomear={(k) => k} />
           <Quebra titulo="Por liga" grupos={porChave(sugestoes, (r) => r.liga)} nomear={(k) => k} />
@@ -129,6 +130,25 @@ function Kpi({ rotulo, valor, sub, cor = 'text-t1' }: { rotulo: string; valor: s
       {sub && <div className="text-[10px] text-t3">{sub}</div>}
     </div>
   );
+}
+
+/**
+ * Corte por FAIXA DE NOTA — em ordem de banda (não por volume). É o que fecha o ciclo: se a nota
+ * mede solidez, a faixa 80+ tem que acertar mais e render mais que a <60. Se não tiver, a
+ * composição da nota está errada e é aqui que aparece — com dados reais, em algumas semanas.
+ */
+function QuebraFaixaNota({ sugestoes }: { sugestoes: SugestaoLiquidada[] }) {
+  const comNota = sugestoes.filter((s) => s.nota != null && (s.status === 'ganhou' || s.status === 'perdeu'));
+  const bandas: [string, (n: number) => boolean][] = [
+    ['Sólida (80+)', (n) => n >= 80],
+    ['Média (60–79)', (n) => n >= 60 && n < 80],
+    ['Fraca (<60)', (n) => n < 60],
+  ];
+  const grupos = bandas
+    .map(([label, teste]) => ({ k: label, ...agregar(comNota.filter((s) => teste(s.nota as number))) }))
+    .filter((g) => g.n > 0);
+  // Mantém a ordem das bandas (Quebra não reordena).
+  return <Quebra titulo="Por faixa de nota" grupos={grupos} nomear={(k) => k} />;
 }
 
 /** Uma quebra do desempenho por dimensão — lista empilhada, sem tabela (nada de scroll lateral). */

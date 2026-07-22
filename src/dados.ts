@@ -51,6 +51,42 @@ export interface Perna {
   // calculada pelo modelo. É o número contra o qual a odd digitada é comparada.
   sem_odd_referencia?: boolean; odd_justa?: number; lambda_escanteios?: number | null;
   stake_pct?: number; stake_rs?: number;
+  nota?: number; nota_componentes?: NotaComponentes | null;
+}
+
+export interface NotaComponentes {
+  concordancia: number; ev: number; amostra: number; maturidade: number; horizonte: number;
+  divergencia_pp: number | null;
+}
+
+/** Faixa/cor da nota: 80+ verde (sólida) · 60-79 azul (média) · <60 cinza (fraca). */
+export function faixaNota(nota: number): { label: string; texto: string; borda: string; fundo: string } {
+  if (nota >= 80) return { label: 'sólida', texto: 'text-verde', borda: 'border-verde', fundo: 'bg-verde/15' };
+  if (nota >= 60) return { label: 'média', texto: 'text-azul', borda: 'border-azul', fundo: 'bg-azul/15' };
+  return { label: 'fraca', texto: 'text-t3', borda: 'border-borda', fundo: 'bg-fundo' };
+}
+
+/** Componentes da nota em linguagem de apostador, pro detalhamento ao tocar. */
+export function explicarNota(c: NotaComponentes, escanteio: boolean): { rotulo: string; valor: string }[] {
+  return [
+    {
+      rotulo: c.divergencia_pp == null ? 'sem 2º modelo conferindo'
+        : c.concordancia >= 24 ? 'modelos concordam'
+        : c.concordancia >= 12 ? 'modelos concordam em parte'
+        : 'modelos divergem',
+      valor: `${Math.round(c.concordancia)}/30${c.divergencia_pp != null ? ` · ${c.divergencia_pp.toFixed(1)} p.p.` : ''}`,
+    },
+    {
+      rotulo: escanteio ? 'convicção do modelo'
+        : c.ev >= 22 ? 'valor na faixa saudável'
+        : c.ev >= 12 ? 'valor moderado'
+        : 'valor fraco ou implausível',
+      valor: `${Math.round(c.ev)}/${escanteio ? 15 : 25}`,
+    },
+    { rotulo: c.amostra >= 20 ? 'amostra cheia no mando' : 'amostra curta no mando', valor: `${Math.round(c.amostra)}/20` },
+    { rotulo: escanteio ? 'escanteios (modelo novo)' : 'família madura', valor: `${Math.round(c.maturidade)}/15` },
+    { rotulo: c.horizonte >= 10 ? 'jogo é hoje' : 'faltam dias pro jogo', valor: `${Math.round(c.horizonte)}/10` },
+  ];
 }
 
 export interface Bilhete {
@@ -342,6 +378,7 @@ export interface SugestaoLiquidada {
   confianca: string; radar: boolean;
   status: 'pendente' | 'ganhou' | 'perdeu';
   gols_casa: number | null; gols_fora: number | null;
+  nota: number | null; nota_componentes?: NotaComponentes | null;
 }
 
 /** Índice das sugestões liquidadas por data|partida|mercado — base da pré-sugestão da aba Apostas. */
@@ -360,7 +397,7 @@ export function useSugestoes() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('sugestoes_liquidadas')
-        .select('id,data,partida,liga,mercado,rotulo,familia,linha,odd_referencia,odd_e_mercado,prob_modelo,confianca,radar,status,gols_casa,gols_fora')
+        .select('id,data,partida,liga,mercado,rotulo,familia,linha,odd_referencia,odd_e_mercado,prob_modelo,confianca,radar,status,gols_casa,gols_fora,nota')
         .order('data', { ascending: false });
       if (error) throw error;
       return (data ?? []) as SugestaoLiquidada[];

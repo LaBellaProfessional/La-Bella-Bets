@@ -1,23 +1,22 @@
 import { useEffect, useState } from 'react';
 import {
-  brl, rotuloMercado, familiaDoMercado, NOME_FAMILIA, chaveEntrada,
-  type Analise, type Bilhete, type Config, type Perna, type Registro, type Rascunho,
+  brl, rotuloMercado, familiaDoMercado, NOME_FAMILIA, chaveEntrada, faixaNota, explicarNota,
+  type Analise, type Bilhete, type Config, type Perna, type Registro, type Rascunho, type NotaComponentes,
 } from '../dados';
 
 /**
- * ABA INÍCIO — a tela de DECISÃO, organizada POR JOGO.
+ * ABA INÍCIO — a tela de DECISÃO, organizada POR JOGO e ORDENADA POR NOTA.
  *
- * Cada partida é um card; cada entrada dentro do card tem seu próprio campo de odd e botão —
- * a odd da casa do Maikon é diferente da odd de referência (europeia), e o veredito só existe
- * depois que ele digita o número real.
+ * Cada partida é um card; cada entrada dentro do card tem seu próprio campo de odd e botão.
+ * Cada card mostra a NOTA DO JOGO (a maior nota entre as entradas) num badge circular no canto,
+ * e cada entrada mostra sua nota individual. A nota mede a SOLIDEZ da oportunidade, não a chance
+ * de ganhar — a legenda no fim da aba deixa isso explícito.
  *
- * Funil: Início decide · Apostas acompanha · Histórico analisa. Por isso uma entrada REGISTRADA
- * some daqui (passa a viver na aba Apostas). O card do jogo continua enquanto tiver entrada não
- * registrada; some quando todas foram registradas.
+ * Ordenação: dentro de cada dia, jogos pela maior nota; entradas dentro do card também por nota.
+ * O horário continua visível em todos os cards (é a ordem em que as decisões vencem).
  *
- * Rascunho persistente: odd e stake digitados são salvos no Supabase (debounce ~1s), keyed pela
- * identidade da entrada. No iPhone o PWA recarrega ao alternar apps — sem isso, o número perdido
- * ao conferir a odd na casa e voltar. Ao reabrir, os campos voltam preenchidos.
+ * Funil: Início decide · Apostas acompanha · Histórico analisa. Entrada registrada some daqui.
+ * Rascunho persistente: odd/stake salvos no Supabase (debounce ~1s), restaurados ao reabrir.
  */
 
 const DIA_MS = 86400000;
@@ -97,6 +96,10 @@ export function Inicio({
           rascunhos={rascunhos} onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
         />
       ))}
+      {/* Legenda fixa: separa "solidez" de "chance de ganhar" — a nota nunca promete resultado. */}
+      <p className="pt-1 text-center text-[11px] leading-snug text-t3">
+        nota mede a solidez da oportunidade, não a chance de ganhar
+      </p>
     </div>
   );
 }
@@ -108,6 +111,8 @@ type Entrada =
 
 const pernasDe = (e: Entrada) => (e.tipo === 'bilhete' ? e.bilhete.pernas : [e.perna]);
 const jogosDe = (e: Entrada) => [...new Set(pernasDe(e).map((p) => p.partida))];
+
+interface InfoNota { nota: number | null; comp: NotaComponentes | null; escanteio: boolean }
 
 function DiaBloco({
   analise, config, registrados, rascunhos, onRegistrar, onSalvarRascunho,
@@ -123,6 +128,24 @@ function DiaBloco({
 
   const emBilhete = new Set(bilhetes.flatMap((b) => b.pernas.map((p) => `${p.jogo_id}|${p.mercado}`)));
   const soltas = pernas.filter((p) => p.aprovada && !p.radar && !emBilhete.has(`${p.jogo_id}|${p.mercado}`));
+
+  // Índice da nota por perna: fonte da verdade é analise.pernas (o bilhete pode não carregar
+  // a nota se o montador não copiar o campo). A nota de uma entrada = a MENOR entre suas pernas
+  // (um bilhete é tão sólido quanto a perna mais fraca).
+  const infoPorPerna = new Map(pernas.map((p) => [`${p.jogo_id}|${p.mercado}`, p]));
+  const infoEntrada = (e: Entrada): InfoNota => {
+    const ps = pernasDe(e).map((x) => infoPorPerna.get(`${x.jogo_id}|${x.mercado}`)).filter(Boolean) as Perna[];
+    const comNota = ps.filter((p) => typeof p.nota === 'number');
+    if (!comNota.length) return { nota: null, comp: null, escanteio: false };
+    const min = comNota.reduce((a, b) => ((a.nota ?? 0) <= (b.nota ?? 0) ? a : b));
+    return {
+      nota: min.nota ?? null,
+      comp: min.nota_componentes ?? null,
+      escanteio: familiaDoMercado(min.mercado) === 'escanteios' || Boolean(min.sem_odd_referencia),
+    };
+  };
+  const notaOrd = (e: Entrada) => infoEntrada(e).nota ?? -1;
+
   const radar = analise.radar ?? [];
 
   const entradasTodas: Entrada[] = [
@@ -136,7 +159,7 @@ function DiaBloco({
   );
 
   // Bilhete que atravessa dois jogos é uma aposta só, com dois riscos: card próprio.
-  const combinadas = entradas.filter((e) => jogosDe(e).length > 1);
+  const combinadas = entradas.filter((e) => jogosDe(e).length > 1).sort((a, b) => notaOrd(b) - notaOrd(a));
   const porJogo = new Map<string, Entrada[]>();
   for (const e of entradas) {
     if (jogosDe(e).length > 1) continue;
@@ -145,11 +168,18 @@ function DiaBloco({
     porJogo.get(k)!.push(e);
   }
 
-  const jogos = [...porJogo.entries()].sort(
-    (a, b) => (pernasDe(a[1][0])[0].hora ?? '').localeCompare(pernasDe(b[1][0])[0].hora ?? ''),
-  );
+  // Jogos ordenados pela MAIOR nota do jogo (desc), horário como desempate.
+  const jogos = [...porJogo.entries()]
+    .map(([partida, lista]) => {
+      const ordenada = [...lista].sort((a, b) => notaOrd(b) - notaOrd(a)); // entradas por nota
+      const notaJogo = Math.max(...ordenada.map(notaOrd));
+      return { partida, lista: ordenada, notaJogo };
+    })
+    .sort((a, b) =>
+      b.notaJogo - a.notaJogo ||
+      (pernasDe(a.lista[0])[0].hora ?? '').localeCompare(pernasDe(b.lista[0])[0].hora ?? ''));
+
   const semEntrada = !combinadas.length && !jogos.length;
-  // Se sobrou nada visível E já havia entradas (todas registradas), não vira "sem entrada": some.
   const tudoRegistrado = semEntrada && entradasTodas.length > 0;
 
   return (
@@ -187,16 +217,20 @@ function DiaBloco({
             <CardJogo
               key={e.chave} data={analise.data} titulo={jogosDe(e).join('  +  ')}
               subtitulo={`bilhete combinado · ${jogosDe(e).length} jogos`}
-              entradas={[e]} config={config} rascunhos={rascunhos} onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
+              entradas={[e]} notaJogo={notaOrd(e) >= 0 ? notaOrd(e) : null}
+              infoEntrada={infoEntrada} config={config} rascunhos={rascunhos}
+              onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
             />
           ))}
-          {jogos.map(([partida, lista]) => {
+          {jogos.map(({ partida, lista, notaJogo }) => {
             const p0 = pernasDe(lista[0])[0];
             return (
               <CardJogo
                 key={partida} data={analise.data} titulo={partida}
                 subtitulo={[p0.liga, p0.hora].filter(Boolean).join(' · ')}
-                entradas={lista} config={config} rascunhos={rascunhos} onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
+                entradas={lista} notaJogo={notaJogo >= 0 ? notaJogo : null}
+                infoEntrada={infoEntrada} config={config} rascunhos={rascunhos}
+                onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
               />
             );
           })}
@@ -206,10 +240,24 @@ function DiaBloco({
   );
 }
 
+/** Badge circular com a nota — verde 80+, azul 60-79, cinza <60. */
+function BadgeNota({ nota }: { nota: number }) {
+  const f = faixaNota(nota);
+  return (
+    <span
+      title={`nota ${nota} (${f.label})`}
+      className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 text-sm font-bold ${f.borda} ${f.fundo} ${f.texto}`}
+    >
+      {nota}
+    </span>
+  );
+}
+
 function CardJogo({
-  data, titulo, subtitulo, entradas, config, rascunhos, onRegistrar, onSalvarRascunho,
+  data, titulo, subtitulo, entradas, notaJogo, infoEntrada, config, rascunhos, onRegistrar, onSalvarRascunho,
 }: {
-  data: string; titulo: string; subtitulo: string; entradas: Entrada[];
+  data: string; titulo: string; subtitulo: string; entradas: Entrada[]; notaJogo: number | null;
+  infoEntrada: (e: Entrada) => InfoNota;
   config?: Config; rascunhos: Map<string, Rascunho>;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
   onSalvarRascunho: SalvarRascunho;
@@ -222,14 +270,18 @@ function CardJogo({
 
   return (
     <div className="overflow-hidden rounded-xl border border-borda bg-card">
-      <div className="border-b border-borda px-4 py-3">
-        <div className="text-sm font-semibold leading-snug text-t1 break-words">{titulo}</div>
-        <div className="mt-0.5 text-xs text-t3">{subtitulo}</div>
-        {entradas.length > 1 && (
-          <div className="mt-2 rounded bg-ambar/10 px-2 py-1 text-[11px] leading-snug text-ambar">
-            {entradas.length} entradas do mesmo jogo — resultado ruim afeta todas
-          </div>
-        )}
+      <div className="flex items-start gap-3 border-b border-borda px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold leading-snug text-t1 break-words">{titulo}</div>
+          <div className="mt-0.5 text-xs text-t3">{subtitulo}</div>
+          {entradas.length > 1 && (
+            <div className="mt-2 rounded bg-ambar/10 px-2 py-1 text-[11px] leading-snug text-ambar">
+              {entradas.length} entradas do mesmo jogo — resultado ruim afeta todas
+            </div>
+          )}
+        </div>
+        {/* NOTA DO JOGO: a maior entre as entradas, no canto superior direito. */}
+        {notaJogo != null && <BadgeNota nota={notaJogo} />}
       </div>
 
       <div className="divide-y divide-borda">
@@ -238,6 +290,7 @@ function CardJogo({
           const ehBilhete = e.tipo === 'bilhete';
           const p = ehBilhete ? null : e.perna;
           const semOdd = Boolean(p?.sem_odd_referencia);
+          const info = infoEntrada(e);
           return (
             <LinhaEntrada
               key={e.chave}
@@ -254,6 +307,10 @@ function CardJogo({
               confiancaMaxima={ehBilhete ? e.bilhete.todas_confianca_maxima : p!.confianca === 'CONFIANCA_MAXIMA' && !p!.amostra_curta}
               rebaixada={!ehBilhete && p!.confianca === 'REBAIXADA'}
               evMinimo={evMinimo}
+              nota={info.nota}
+              notaComp={info.comp}
+              notaEscanteio={info.escanteio}
+              bilheteMultiplo={ehBilhete && e.bilhete.n_pernas > 1}
               rascunho={rascunhos.get(chaveEntrada(data, pernas))}
               onRegistrar={onRegistrar}
               onSalvarRascunho={onSalvarRascunho}
@@ -267,12 +324,14 @@ function CardJogo({
 
 function LinhaEntrada({
   data, pernas, rotulo, tipo, familia, oddReferencia, prob, stakePct, stakeRS,
-  confiancaMaxima, rebaixada, evMinimo, semOdd, rascunho, onRegistrar, onSalvarRascunho,
+  confiancaMaxima, rebaixada, evMinimo, semOdd, nota, notaComp, notaEscanteio, bilheteMultiplo,
+  rascunho, onRegistrar, onSalvarRascunho,
 }: {
   data: string; pernas: Perna[]; rotulo: string; tipo: string; familia: string;
   oddReferencia: number; prob: number; stakePct: number; stakeRS: number;
   confiancaMaxima: boolean; rebaixada: boolean; evMinimo: number;
-  semOdd?: boolean; rascunho?: Rascunho;
+  semOdd?: boolean; nota: number | null; notaComp: NotaComponentes | null;
+  notaEscanteio: boolean; bilheteMultiplo: boolean; rascunho?: Rascunho;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
   onSalvarRascunho: SalvarRascunho;
 }) {
@@ -281,10 +340,10 @@ function LinhaEntrada({
   const [stake, setStake] = useState<number>(stakeRS);
   const [tocou, setTocou] = useState(false);
   const [salvo, setSalvo] = useState(false);
+  const [notaAberta, setNotaAberta] = useState(false);
   const [estado, setEstado] = useState<'ocioso' | 'enviando' | 'ok' | 'erro'>('ocioso');
   const [erro, setErro] = useState<string | null>(null);
 
-  // Restaura o rascunho quando ele chega do servidor — sem sobrescrever o que o usuário já digitou.
   useEffect(() => {
     if (tocou || !rascunho) return;
     if (rascunho.odd_casa != null) setOddCasa(String(rascunho.odd_casa));
@@ -292,8 +351,6 @@ function LinhaEntrada({
     if (rascunho.odd_casa != null || rascunho.stake != null) setSalvo(true);
   }, [rascunho, tocou]);
 
-  // Salva o rascunho 1s depois de o usuário parar de digitar (debounce). Fire-and-forget.
-  // odd_casa vira número (ou null) antes de sair daqui — a coluna é numeric.
   useEffect(() => {
     if (!tocou) return;
     setSalvo(false);
@@ -310,8 +367,7 @@ function LinhaEntrada({
     return () => clearTimeout(t);
   }, [oddCasa, stake, tocou]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Vírgula→ponto no MESMO ponto do veredito (não só no insert): o teclado iOS digita "1,68"
-  // e Number("1,68") seria NaN — o veredito ficaria mudo enquanto o justo já estava calculado.
+  // Vírgula→ponto no MESMO ponto do veredito (não só no insert): "1,68" nunca vira NaN.
   const odd = normalizarOdd(oddCasa) ?? 0;
   const justo = prob > 0 ? 1 / prob : 0;
   const valorNaOdd = prob * odd;
@@ -338,10 +394,40 @@ function LinhaEntrada({
     <div className="px-4 py-3">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="text-sm font-semibold text-azul break-words">{rotulo}</span>
-        <span className="ml-auto font-mono text-sm text-t2">
-          {semOdd ? `justa @${oddReferencia.toFixed(2)}` : `@${oddReferencia.toFixed(2)}`}
-        </span>
+        <div className="ml-auto flex items-center gap-2">
+          {/* Nota individual da entrada: toca pra abrir o detalhamento dos componentes. */}
+          {nota != null && (
+            <button
+              onClick={() => setNotaAberta((v) => !v)}
+              className={`inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[11px] font-bold ${faixaNota(nota).borda} ${faixaNota(nota).fundo} ${faixaNota(nota).texto}`}
+            >
+              {nota}<span className="text-[9px] font-normal opacity-70">{notaAberta ? '▲' : '▼'}</span>
+            </button>
+          )}
+          <span className="font-mono text-sm text-t2">
+            {semOdd ? `justa @${oddReferencia.toFixed(2)}` : `@${oddReferencia.toFixed(2)}`}
+          </span>
+        </div>
       </div>
+
+      {/* Detalhamento da nota em linguagem de apostador. */}
+      {nota != null && notaAberta && notaComp && (
+        <div className="mt-2 rounded-lg border border-borda bg-fundo px-3 py-2">
+          <div className="space-y-1">
+            {explicarNota(notaComp, notaEscanteio).map((linha, i) => (
+              <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
+                <span className="text-t2">{linha.rotulo}</span>
+                <span className="font-mono text-t3">{linha.valor}</span>
+              </div>
+            ))}
+          </div>
+          {bilheteMultiplo && (
+            <div className="mt-1.5 border-t border-borda pt-1.5 text-[10px] leading-snug text-t3">
+              nota do bilhete = a da perna mais fraca (o conjunto é tão sólido quanto ela)
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mt-1 flex flex-wrap gap-1.5">
         <span className="rounded bg-fundo px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-t3">{familia}</span>
