@@ -52,6 +52,12 @@ export interface Perna {
   // Escanteios: a API não publica preço, então a perna nasce sem odd e com a odd JUSTA
   // calculada pelo modelo. É o número contra o qual a odd digitada é comparada.
   sem_odd_referencia?: boolean; odd_justa?: number; lambda_escanteios?: number | null;
+  // AGUARDA ODD (Parte C): prêmio improvável (justa < piso) no modo sem-odd. Não reprova mais —
+  // entra aprovada, mas o dash a recolhe numa seção discreta abaixo dos aprovados, campo de odd
+  // ativo, veredito normal ao digitar. Só organiza a tela, nunca bloqueia o registro.
+  aguarda_odd?: boolean;
+  // Proveniência da entrada, quando registrada fora do fluxo do método (Parte B).
+  origem?: 'metodo' | 'maikon_faro' | 'analistas';
   stake_pct?: number; stake_rs?: number;
   nota?: number; nota_componentes?: NotaComponentes | null;
   sem_linha?: boolean;   // jogo sem linha da API (modo odd manual) — agrupa em seção própria
@@ -114,12 +120,25 @@ export interface Analise {
   avisos?: string[];
 }
 
+/** Foto do que o MÉTODO dizia quando o Maikon apostou por faro — pra medir o faro CONTRA o método. */
+export interface SnapshotMetodo {
+  veredito: 'aprovada' | 'radar' | 'reprovada' | 'aguarda_odd' | 'sem_modelo';
+  motivo: string | null;
+  horizonte_dias: number;
+  odd_justa: number | null;
+  prob_modelo: number | null;
+  nota: number | null;
+}
+
 export interface Registro {
   id: string; data: string; registrado_em: string;
   pernas: { partida: string; mercado: string; rotulo?: string; odd: number | null; hora?: string | null }[];
   odd_total: number; odd_referencia?: number | null; casa_odd?: string | null; prob_combinada: number; ev_pct: number;
   stake_real: number; resultado: 'pendente' | 'ganhou' | 'perdeu' | 'cancelada';
   retorno_rs: number; banca_depois: number | null; resolvido_em?: string | null;
+  // Proveniência (Parte B): 'metodo' (default, fluxo normal) · 'maikon_faro' · 'analistas'.
+  origem?: 'metodo' | 'maikon_faro' | 'analistas';
+  snapshot_metodo?: SnapshotMetodo | null;
 }
 
 /**
@@ -382,6 +401,85 @@ export function useRodarMotor() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['datas'] });
       qc.invalidateQueries({ queryKey: ['analise'] });
+    },
+  });
+}
+
+/**
+ * Veredito do MÉTODO pra uma perna, do ponto de vista da aposta do faro (Parte B): é o que o
+ * snapshot guarda e o que a linha "o método diria: X" mostra. Aprovada, no radar, recolhida
+ * (aguarda odd), reprovada ou sem modelo — com o motivo exato quando houver.
+ */
+export function snapshotDaPerna(p: Perna): SnapshotMetodo {
+  const veredito: SnapshotMetodo['veredito'] =
+    p.prob_final == null && p.prob_heuristica == null ? 'sem_modelo'
+      : p.aguarda_odd ? 'aguarda_odd'
+      : p.radar ? 'radar'
+      : p.aprovada ? 'aprovada'
+      : 'reprovada';
+  const oddJusta = p.odd_justa ?? (p.prob_final ? +(1 / p.prob_final).toFixed(2) : null);
+  return {
+    veredito,
+    motivo: p.motivo ?? p.motivo_radar ?? null,
+    horizonte_dias: p.horizonte_dias ?? 0,
+    odd_justa: oddJusta,
+    prob_modelo: p.prob_final ?? p.prob_heuristica ?? null,
+    nota: p.nota ?? null,
+  };
+}
+
+/** Frase de uma linha "o método diria: X" — sem paternalismo, só o contexto do que o faro contraria. */
+export function metodoDiria(s: SnapshotMetodo): string {
+  switch (s.veredito) {
+    case 'aprovada': return 'o método aprovou esta entrada';
+    case 'radar': return `o método segurou no radar${s.motivo ? ` — ${s.motivo}` : ''}`;
+    case 'aguarda_odd': return `o método recolheu (prêmio improvável${s.odd_justa ? `, justo @${s.odd_justa.toFixed(2)}` : ''})`;
+    case 'sem_modelo': return 'o método não tem modelo pra este mercado';
+    default: return `o método reprovou${s.motivo ? ` — ${s.motivo}` : ''}`;
+  }
+}
+
+/**
+ * APOSTA DO MAIKON (FARO) — Parte B. Registra QUALQUER mercado avaliado por convicção própria,
+ * mesmo o que o método não aprovou. Grava origem='maikon_faro' + o snapshot do que o método diria,
+ * pra saber CONTRA O QUÊ o faro acertou. Sem gate de veredito — a única obrigação é a odd da casa.
+ * odd_referencia = a odd que o modelo viu (linha da API ou justa), pra o CLV do faro depois.
+ */
+export function useApostarFaro() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (e: {
+      data: string; perna: Perna; odd_real: number; stake: number;
+      casa_odd: string | null; snapshot: SnapshotMetodo;
+    }) => {
+      const p = e.perna;
+      const oddRef = p.odd ?? p.odd_justa ?? e.snapshot.odd_justa ?? null;
+      const prob = p.prob_final ?? e.snapshot.prob_modelo ?? 0;
+      const { error } = await supabase.from('bilhetes').insert({
+        data: e.data,
+        pernas: [{ partida: p.partida, mercado: p.mercado, rotulo: rotuloMercado(p.mercado), odd: e.odd_real, hora: p.hora ?? null }],
+        n_pernas: 1,
+        odd_total: e.odd_real,
+        odd_referencia: oddRef,
+        casa_odd: e.casa_odd,
+        prob_combinada: prob,
+        ev_pct: (prob * e.odd_real - 1) * 100,
+        stake_sugerido: e.stake,
+        stake_real: e.stake,
+        ligas: [p.liga],
+        mercados: [p.mercado],
+        faixa_odd: e.odd_real < 1.5 ? '1.40-1.50' : e.odd_real < 1.6 ? '1.50-1.60' : '1.60+',
+        confianca: 'faro',
+        origem: 'maikon_faro',
+        snapshot_metodo: e.snapshot,
+      });
+      if (error) throw error;
+      // Se havia rascunho dessa entrada, cumpriu o papel.
+      try { await supabase.from('rascunhos').delete().eq('chave', chaveEntrada(e.data, [p])); } catch { /* ignora */ }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['bilhetes'] });
+      qc.invalidateQueries({ queryKey: ['rascunhos'] });
     },
   });
 }

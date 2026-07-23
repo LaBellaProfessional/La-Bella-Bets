@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
   brl, rotuloMercado, familiaDoMercado, NOME_FAMILIA, chaveEntrada, faixaNota, explicarNota,
+  snapshotDaPerna, metodoDiria,
   type Analise, type Bilhete, type Config, type Perna, type Registro, type Rascunho, type NotaComponentes,
+  type SnapshotMetodo,
 } from '../dados';
 // Veredito da odd digitada: fonte única em _shared (mesma regra do motor). NÃO recalcular aqui —
 // foi o recálculo local, comparando múltiplo de EV contra margem em %, que invertia o veredito.
@@ -50,6 +52,11 @@ export interface EntradaRegistro {
   prob: number; stake: number; casa_odd: string | null;
 }
 
+/** Payload da aposta do faro (Parte B): uma perna, a odd da casa, o snapshot do que o método diria. */
+export interface EntradaFaro {
+  data: string; perna: Perna; odd_real: number; stake: number; casa_odd: string | null; snapshot: SnapshotMetodo;
+}
+
 export interface SalvarRascunho {
   (r: { chave: string; data: string; partida: string | null; mercado: string | null; odd_casa: number | null; stake: number | null }): void;
 }
@@ -61,7 +68,7 @@ function normalizarOdd(bruto: string): number | null {
 }
 
 export function Inicio({
-  janela, config, carregando, jaRegistrados, rascunhos, onRegistrar, onSalvarRascunho, onAnalisar,
+  janela, config, carregando, jaRegistrados, rascunhos, onRegistrar, onApostarFaro, onSalvarRascunho, onAnalisar,
 }: {
   janela: Analise[];
   config?: Config;
@@ -69,6 +76,7 @@ export function Inicio({
   jaRegistrados: Registro[];
   rascunhos: Map<string, Rascunho>;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
+  onApostarFaro: (e: EntradaFaro) => Promise<unknown>;
   onSalvarRascunho: SalvarRascunho;
   onAnalisar?: () => void;
 }) {
@@ -98,7 +106,7 @@ export function Inicio({
       {janela.map((a) => (
         <DiaBloco
           key={a.data} analise={a} config={config} registrados={registrados} registrosPendentes={pendentes}
-          rascunhos={rascunhos} onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
+          rascunhos={rascunhos} onRegistrar={onRegistrar} onApostarFaro={onApostarFaro} onSalvarRascunho={onSalvarRascunho}
         />
       ))}
       {/* Legenda fixa: separa "solidez" de "chance de ganhar" — a nota nunca promete resultado. */}
@@ -120,20 +128,22 @@ const jogosDe = (e: Entrada) => [...new Set(pernasDe(e).map((p) => p.partida))];
 interface InfoNota { nota: number | null; comp: NotaComponentes | null; escanteio: boolean }
 
 function DiaBloco({
-  analise, config, registrados, registrosPendentes, rascunhos, onRegistrar, onSalvarRascunho,
+  analise, config, registrados, registrosPendentes, rascunhos, onRegistrar, onApostarFaro, onSalvarRascunho,
 }: {
   analise: Analise; config?: Config;
   registrados: Set<string>;
   registrosPendentes: Registro[];
   rascunhos: Map<string, Rascunho>;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
+  onApostarFaro: (e: EntradaFaro) => Promise<unknown>;
   onSalvarRascunho: SalvarRascunho;
 }) {
   const bilhetes = analise.bilhetes ?? [];
   const pernas = analise.pernas ?? [];
 
   const emBilhete = new Set(bilhetes.flatMap((b) => b.pernas.map((p) => `${p.jogo_id}|${p.mercado}`)));
-  const soltas = pernas.filter((p) => p.aprovada && !p.radar && !emBilhete.has(`${p.jogo_id}|${p.mercado}`));
+  // AGUARDA ODD (Parte C) sai do fluxo normal — vai pra seção recolhida própria, não vira card solto.
+  const soltas = pernas.filter((p) => p.aprovada && !p.radar && !p.aguarda_odd && !emBilhete.has(`${p.jogo_id}|${p.mercado}`));
 
   // Índice da nota por perna: fonte da verdade é analise.pernas (o bilhete pode não carregar
   // a nota se o montador não copiar o campo). A nota de uma entrada = a MENOR entre suas pernas
@@ -197,6 +207,47 @@ function DiaBloco({
   const jogos = montarJogos((p) => !partidasSemLinha.has(p));          // com linha
   const jogosSemLinha = montarJogos((p) => partidasSemLinha.has(p));   // sem linha, acionáveis
 
+  // AGUARDA ODD (Parte C): prêmio improvável no modo sem-odd. Aprovadas mas recolhidas numa seção
+  // própria e discreta — campo de odd ativo, veredito decide ao digitar. Independem do split
+  // soltas/radar (uma aguarda a D+1 é radar; a D+0 não): puxamos direto de pernas.aguarda_odd.
+  const aguardaEntradas: Entrada[] = pernas
+    .filter((p) => p.aprovada && p.aguarda_odd)
+    .map((p, i) => ({ tipo: 'perna' as const, chave: `ag${i}`, perna: p }))
+    .filter((e) => !entradaRegistrada(e));
+  const jogosAguarda = (() => {
+    const m = new Map<string, Entrada[]>();
+    for (const e of aguardaEntradas) {
+      const k = jogosDe(e)[0];
+      if (!m.has(k)) m.set(k, []);
+      m.get(k)!.push(e);
+    }
+    return [...m.entries()]
+      .map(([partida, lista]) => {
+        const ordenada = [...lista].sort((a, b) => notaOrd(b) - notaOrd(a));
+        return { partida, lista: ordenada, notaJogo: Math.max(...ordenada.map(notaOrd)) };
+      })
+      .sort((a, b) => b.notaJogo - a.notaJogo);
+  })();
+
+  // APOSTA DO FARO (Parte B): TODO mercado avaliado ganha a ação "Apostar assim mesmo" — aprovado,
+  // no radar, reprovado ou sem odd. Some da lista quando a entrada já foi registrada (mesma chave).
+  // Fica numa seção recolhida e discreta pra não competir com os aprovados.
+  const faroPorJogo = (() => {
+    const m = new Map<string, Perna[]>();
+    for (const p of pernas) {
+      if (registrados.has(chaveEntrada(analise.data, [p]))) continue;
+      if (!m.has(p.partida)) m.set(p.partida, []);
+      m.get(p.partida)!.push(p);
+    }
+    return [...m.entries()]
+      .map(([partida, ps]) => ({
+        partida,
+        pernas: [...ps].sort((a, b) => (b.nota ?? -1) - (a.nota ?? -1)),
+        hora: ps[0].hora ?? '',
+      }))
+      .sort((a, b) => a.hora.localeCompare(b.hora));
+  })();
+
   // BOLÍVAR: jogo sem linha que NÃO produziu entrada acionável — não vira card de reprovadas,
   // vai pro grupo recolhido com motivo honesto (sem histórico vs. nada passou nos filtros).
   const partidasAcionaveis = new Set(jogosSemLinha.map((j) => j.partida));
@@ -212,7 +263,9 @@ function DiaBloco({
         : 'sem linha da API · sem histórico/estatística pros times',
     }));
 
-  const semEntrada = !combinadas.length && !jogos.length && !jogosSemLinha.length && !bolivar.length;
+  const temPrincipal = Boolean(combinadas.length || jogos.length || jogosSemLinha.length || bolivar.length);
+  // AGUARDA ODD sozinha não conta como "sem entrada" (existe conteúdo, só recolhido).
+  const semEntrada = !temPrincipal && !jogosAguarda.length;
   const tudoRegistrado = semEntrada && entradasTodas.length > 0;
 
   // Exposição do dia: quanto do teto de risco diário (8% da banca) já está EM JOGO neste dia.
@@ -315,9 +368,218 @@ function DiaBloco({
               </div>
             </div>
           )}
+
+          {/* ── AGUARDA ODD (prêmio improvável) — recolhida, discreta, abaixo de tudo ── */}
+          {jogosAguarda.length > 0 && (
+            <GrupoAguardaOdd
+              jogos={jogosAguarda} data={analise.data} infoEntrada={infoEntrada}
+              config={config} rascunhos={rascunhos}
+              onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
+            />
+          )}
         </div>
       )}
+
+      {/* ── APOSTA DO FARO (Parte B): "Apostar assim mesmo" em qualquer mercado — porta própria ── */}
+      {faroPorJogo.length > 0 && (
+        <SecaoFaro jogos={faroPorJogo} data={analise.data} config={config} onApostarFaro={onApostarFaro} />
+      )}
     </section>
+  );
+}
+
+/**
+ * APOSTA DO FARO (Parte B) — porta própria do capitão. TODO mercado avaliado (aprovado, radar,
+ * reprovado, sem odd) ganha a ação "Apostar assim mesmo". Fica recolhida por padrão pra não
+ * competir com os aprovados. Sem paternalismo: uma linha "o método diria: X" e stake livre até o
+ * teto de 8%. Grava origem='maikon_faro' + o snapshot do que o método diria — pra saber CONTRA
+ * O QUÊ o faro acertou.
+ */
+function SecaoFaro({
+  jogos, data, config, onApostarFaro,
+}: {
+  jogos: { partida: string; pernas: Perna[]; hora: string }[];
+  data: string; config?: Config;
+  onApostarFaro: (e: EntradaFaro) => Promise<unknown>;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const total = jogos.reduce((s, j) => s + j.pernas.length, 0);
+  return (
+    <div className="mt-4 border-t border-borda pt-3">
+      <button onClick={() => setAberto((v) => !v)} className="flex w-full items-center gap-2 text-left">
+        <span className="rounded bg-roxo/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-roxo">faro</span>
+        <span className="flex-1 text-xs text-t3">
+          Apostar assim mesmo — {total} {total === 1 ? 'mercado avaliado' : 'mercados avaliados'} do dia
+        </span>
+        <span className="text-xs text-t3">{aberto ? 'ocultar' : 'ver'}</span>
+      </button>
+      {aberto && (
+        <div className="mt-3 space-y-3">
+          <p className="text-[11px] leading-snug text-t3">
+            Sua porta própria: registra qualquer mercado por convicção, mesmo o que o método não
+            aprovou. Fica marcado como <b className="text-roxo">FARO</b> na aba Apostas, com o registro
+            do que o método diria — pra medir o faro contra o método. Stake livre até o teto de {config?.teto_exposicao_diaria_pct ?? 8}%.
+          </p>
+          {jogos.map((j) => (
+            <div key={j.partida} className="overflow-hidden rounded-xl border border-borda bg-card">
+              <div className="border-b border-borda px-4 py-2.5">
+                <div className="text-sm font-semibold leading-snug text-t1 break-words">{j.partida}</div>
+                <div className="mt-0.5 text-[11px] text-t3">{[j.pernas[0].liga, j.hora].filter(Boolean).join(' · ')}</div>
+              </div>
+              <div className="divide-y divide-borda">
+                {j.pernas.map((p) => (
+                  <LinhaFaro key={p.mercado} data={data} perna={p} config={config} onApostarFaro={onApostarFaro} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Uma linha de faro: mercado, veredito do método, campo de odd + stake e o botão "Apostar assim mesmo". */
+function LinhaFaro({
+  data, perna, config, onApostarFaro,
+}: {
+  data: string; perna: Perna; config?: Config;
+  onApostarFaro: (e: EntradaFaro) => Promise<unknown>;
+}) {
+  const snapshot = snapshotDaPerna(perna);
+  const tetoPct = config?.teto_exposicao_diaria_pct ?? 8;
+  // Faro default de 1% da banca (a porta é discreta e o risco é do capitão), teto de 8%.
+  const stakeDefault = +(((config?.banca ?? 1000) * 1) / 100).toFixed(2);
+  const tetoRs = +(((config?.banca ?? 1000) * tetoPct) / 100).toFixed(2);
+
+  const [oddCasa, setOddCasa] = useState<string>(perna.odd != null ? perna.odd.toFixed(2) : '');
+  const [stake, setStake] = useState<number>(stakeDefault);
+  const [estado, setEstado] = useState<'ocioso' | 'enviando' | 'ok' | 'erro'>('ocioso');
+  const [erro, setErro] = useState<string | null>(null);
+
+  const odd = normalizarOdd(oddCasa) ?? 0;
+  const prob = perna.prob_final ?? perna.prob_heuristica ?? 0;
+  const justo = prob > 0 ? +(1 / prob).toFixed(2) : 0;
+  const ganho = prob > 0 && odd > 1 ? (prob * odd - 1) * 100 : 0;
+  const acimaTeto = stake > tetoRs;
+  const cor = snapshot.veredito === 'aprovada' ? 'text-verde'
+    : snapshot.veredito === 'radar' || snapshot.veredito === 'aguarda_odd' ? 'text-ambar'
+    : 'text-t3';
+
+  async function registrar() {
+    setEstado('enviando'); setErro(null);
+    try {
+      await onApostarFaro({ data, perna, odd_real: odd, stake, casa_odd: perna.casa_odd ?? null, snapshot });
+      setEstado('ok');
+    } catch (e) {
+      setEstado('erro'); setErro(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return (
+    <div className="px-4 py-2.5">
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <span className="text-sm font-medium text-t2 break-words">{rotuloMercado(perna.mercado)}</span>
+        <span className="ml-auto font-mono text-xs text-t3">
+          {prob > 0 ? `${(prob * 100).toFixed(0)}% · justo @${justo.toFixed(2)}` : 'sem modelo'}
+        </span>
+      </div>
+      {/* Aviso de 1 linha, sem paternalismo: o que o método diria. */}
+      <div className={`mt-0.5 text-[11px] leading-snug ${cor}`}>{metodoDiria(snapshot)}</div>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <span className="text-[11px] text-t3">Odd</span>
+        <input
+          type="text" inputMode="decimal" value={oddCasa}
+          onChange={(e) => { setOddCasa(e.target.value); if (estado === 'erro') setEstado('ocioso'); }}
+          placeholder="da sua casa"
+          className="w-24 rounded border border-borda bg-fundo px-2 py-1 font-mono text-sm text-t1 outline-none focus:border-roxo"
+        />
+        <span className="text-[11px] text-t3">R$</span>
+        <input
+          type="number" step="0.01" inputMode="decimal" value={stake}
+          onChange={(e) => setStake(Number(e.target.value))}
+          className="w-20 rounded border border-borda bg-fundo px-2 py-1 text-sm text-t1 outline-none focus:border-roxo"
+        />
+        <button
+          disabled={estado === 'ok' || estado === 'enviando' || odd <= 1 || acimaTeto || stake <= 0}
+          onClick={registrar}
+          className={`ml-auto rounded px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed ${
+            estado === 'ok' ? 'bg-roxo/20 text-roxo' : 'bg-roxo text-white disabled:bg-borda disabled:text-t3'
+          }`}
+        >
+          {estado === 'ok' ? 'registrado ✓'
+            : estado === 'enviando' ? 'registrando…'
+            : odd <= 1 ? 'Digite a odd'
+            : acimaTeto ? `acima do teto` : 'Apostar assim mesmo'}
+        </button>
+      </div>
+      {odd > 1 && (
+        <div className={`mt-1 text-[11px] ${ganho >= 0 ? 'text-t3' : 'text-vermelho'}`}>
+          {ganho >= 0
+            ? `@${odd.toFixed(2)} paga ${ganho.toFixed(1)}% acima do justo`
+            : `@${odd.toFixed(2)} está ${Math.abs(ganho).toFixed(1)}% abaixo do justo — faro contra o preço`}
+        </div>
+      )}
+      {acimaTeto && <div className="mt-1 text-[11px] text-vermelho">stake acima do teto de {tetoPct}% ({brl(tetoRs)})</div>}
+      {estado === 'erro' && (
+        <div className="mt-1.5 rounded border border-vermelho/40 bg-vermelho/10 px-2 py-1 text-[11px] leading-snug text-vermelho break-words">
+          Não registrou: {erro}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Seção recolhida das entradas AGUARDA ODD (Parte C): prêmio improvável, a casa raramente paga
+ * acima do justo — mas se a do Maikon pagar, o campo está ativo e o veredito confere. Fica fechada
+ * por padrão pra não competir com os aprovados; abre num toque.
+ */
+function GrupoAguardaOdd({
+  jogos, data, infoEntrada, config, rascunhos, onRegistrar, onSalvarRascunho,
+}: {
+  jogos: { partida: string; lista: Entrada[]; notaJogo: number }[];
+  data: string; infoEntrada: (e: Entrada) => InfoNota;
+  config?: Config; rascunhos: Map<string, Rascunho>;
+  onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
+  onSalvarRascunho: SalvarRascunho;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const total = jogos.reduce((s, j) => s + j.lista.length, 0);
+  return (
+    <div className="pt-2">
+      <button
+        onClick={() => setAberto((v) => !v)}
+        className="flex w-full items-center gap-2 rounded-xl border border-borda bg-card px-4 py-3 text-left"
+      >
+        <span className="rounded bg-fundo px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-t3">aguarda odd</span>
+        <span className="flex-1 text-sm text-t2">
+          {total} {total === 1 ? 'entrada de prêmio improvável' : 'entradas de prêmio improvável'}
+        </span>
+        <span className="text-xs text-t3">{aberto ? 'ocultar' : 'ver'}</span>
+      </button>
+      {aberto && (
+        <div className="mt-3 space-y-3">
+          <p className="px-1 text-[11px] leading-snug text-t3">
+            O modelo dá chance altíssima aqui, então o justo é muito baixo — a casa raramente paga
+            acima. Não bloqueia: se a sua ofertar um preço bom, digite e o veredito confere.
+          </p>
+          {jogos.map(({ partida, lista, notaJogo }) => {
+            const p0 = pernasDe(lista[0])[0];
+            return (
+              <CardJogo
+                key={partida} data={data} titulo={partida}
+                subtitulo={[p0.liga, p0.hora, 'prêmio improvável'].filter(Boolean).join(' · ')}
+                entradas={lista} notaJogo={notaJogo >= 0 ? notaJogo : null}
+                infoEntrada={infoEntrada} config={config} rascunhos={rascunhos}
+                onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -5,7 +5,7 @@ import { Login } from './Login';
 import {
   useConfig, useDatas, useAnalise, useBilhetes, useSugestoes,
   useAlterarResultado, useSalvarConfig, useRodarMotor, useJanelaCompleta, useRegistrarEntrada,
-  useRascunhos, useSalvarRascunho, indiceSugestoes, classificarAposta,
+  useApostarFaro, useRascunhos, useSalvarRascunho, indiceSugestoes, classificarAposta,
   brl, emJogoDe, saldoDaSemana, type Registro,
 } from './dados';
 import { Inicio } from './telas/Inicio';
@@ -76,6 +76,7 @@ function Dash() {
   const erroQuery = qConfig.error ?? qDatas.error ?? qAnalise.error;
 
   const registrar = useRegistrarEntrada();
+  const apostarFaro = useApostarFaro();
   const alterarResultado = useAlterarResultado();
   const salvarRascunho = useSalvarRascunho();
   const salvarConfig = useSalvarConfig();
@@ -162,6 +163,7 @@ function Dash() {
             // mutateAsync (e não mutate): o card precisa do erro pra mostrar na tela.
             // Com mutate, a falha morre no estado do hook e a tela finge que nada aconteceu.
             onRegistrar={(e) => registrar.mutateAsync(e)}
+            onApostarFaro={(e) => apostarFaro.mutateAsync(e)}
             onSalvarRascunho={(r) => salvarRascunho.mutate(r)}
             onAnalisar={() => rodar('analisar')}
           />

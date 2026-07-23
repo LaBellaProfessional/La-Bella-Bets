@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  brl, rotuloMercado, horaDaAposta, classificarAposta, emJogoDe, saldoDaSemana,
+  brl, rotuloMercado, horaDaAposta, classificarAposta, emJogoDe, saldoDaSemana, metodoDiria,
   type Registro, type SugLiquidada, type EstadoAposta,
 } from '../dados';
 
@@ -114,6 +114,8 @@ function CardAposta({
   const [erro, setErro] = useState<string | null>(null);
   const s = ESTILO[estado];
 
+  const ehFaro = registro.origem === 'maikon_faro';
+  const ehAnalistas = registro.origem === 'analistas';
   const jogos = [...new Set(registro.pernas.map((p) => p.partida))];
   const titulo = jogos.join('  +  ');
   const mercados = registro.pernas.map((p) => p.rotulo ?? rotuloMercado(p.mercado)).join('  +  ');
@@ -161,7 +163,16 @@ function CardAposta({
     <div className={`overflow-hidden rounded-xl border bg-card ${s.borda}`}>
       <div className="px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${s.tag}`}>{s.rotulo}</span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${s.tag}`}>{s.rotulo}</span>
+            {/* Selo de proveniência: FARO (cor distinta) e ANALISTAS têm porta própria. */}
+            {ehFaro && (
+              <span className="rounded bg-roxo/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-roxo">faro</span>
+            )}
+            {ehAnalistas && (
+              <span className="rounded bg-laranja/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-laranja">analistas</span>
+            )}
+          </div>
           <span className="font-mono text-xs text-t3">
             {registro.data}{hora ? ` · ${hora}` : ''} · @{registro.odd_total.toFixed(2)} · {brl(registro.stake_real)}
           </span>
@@ -169,6 +180,13 @@ function CardAposta({
 
         <div className="mt-2 text-sm font-semibold leading-snug text-t1 break-words">{titulo}</div>
         <div className="mt-0.5 text-xs text-azul break-words">{mercados}</div>
+
+        {/* FARO: o que o método diria no momento da aposta — o "contra o quê" do faro. */}
+        {ehFaro && registro.snapshot_metodo && (
+          <div className="mt-2 rounded-lg border border-roxo/25 bg-roxo/5 px-2.5 py-1.5 text-[11px] leading-snug text-t2">
+            <span className="text-roxo">faro:</span> {metodoDiria(registro.snapshot_metodo)}
+          </div>
+        )}
 
         {/* Pernas detalhadas quando é combinada. */}
         {registro.pernas.length > 1 && (

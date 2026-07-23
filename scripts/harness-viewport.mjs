@@ -56,7 +56,7 @@ createRoot(document.getElementById('root')!).render(
       </nav>
     </header>
     <main className="mx-auto max-w-4xl px-4 py-5 pb-16">
-      <Inicio janela={[w.__ANALISE]} config={w.__CONFIG} jaRegistrados={w.__BILHETES} rascunhos={new Map()} onRegistrar={async () => {}} onSalvarRascunho={() => {}} />
+      <Inicio janela={[w.__ANALISE]} config={w.__CONFIG} jaRegistrados={w.__BILHETES} rascunhos={new Map()} onRegistrar={async () => {}} onApostarFaro={async () => {}} onSalvarRascunho={() => {}} />
       <Analises analise={w.__ANALISE} />
       <Historico
         registros={(w.__BILHETES as never as { stake_real: number }[]).map((b) => ({ ...b, stake_rs: b.stake_real })) as never}

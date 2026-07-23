@@ -15,6 +15,8 @@ export default {
         ambar: '#c47d10',
         azul: '#29b8e0',
         rosa: '#f0357a',
+        roxo: '#8b5cf6',
+        laranja: '#e8843c',
       },
     },
   },

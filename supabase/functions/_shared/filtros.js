@@ -58,21 +58,29 @@ export function avaliarPerna({ jogo, mercado, odd, probH, probDC, probPush, amos
     }
     const pisoManual = (filtros.convicao_minima_sem_odd ?? 60) / 100;
     if (probFinal < pisoManual) return { ...sem, aprovada: false, motivo: MOTIVO.CONVICCAO_BAIXA(probFinal, pisoManual) };
-    // Corte de PRÊMIO INEXISTENTE: mercado com odd justa muito baixa (prob altíssima) não vira card
-    // — a casa não paga acima de ~1.25 nesses, então não há margem possível pra digitar.
     const oddJusta = +(1 / probFinal).toFixed(2);
     const oddJustaMin = filtros.odd_justa_minima_sem_odd ?? 1.25;
-    if (oddJusta < oddJustaMin) return { ...sem, aprovada: false, odd_justa: oddJusta, motivo: MOTIVO.PREMIO_INEXISTENTE(oddJusta, oddJustaMin) };
+    // PARTE C (24/07): o corte de PRÊMIO IMPROVÁVEL não REPROVA mais. Ele assumia que a casa não
+    // oferta acima do justo nesses mercados — mas o caso real (over 1.5 Bolívar x Grêmio, justa
+    // @1.18, casa brasileira ofertando 1.30 = +10% real) provou que a oferta EXISTE. O corte por
+    // justa passa a valer só pra ORGANIZAÇÃO DE TELA: a perna entra APROVADA e sem_odd, mas com a
+    // marca `aguarda_odd` — o dash a coloca numa seção recolhida e discreta abaixo dos aprovados,
+    // com o campo de odd ativo. O veredito normal decide quando a odd for digitada; nada bloqueia
+    // o registro. Assimetria proposital: o improvável fica de fora dos olhos, não fora do alcance.
+    const aguardaOdd = oddJusta < oddJustaMin;
     return {
       ...sem,
       aprovada: true,
       odd_justa: oddJusta,
+      aguarda_odd: aguardaOdd,
       confianca: CONFIANCA.REBAIXADA,
       dixon_coles_disponivel: temDC,
       amostra_curta: amostraCurta,
       badge_amostra: amostraCurta ? `amostra curta no mando (${amostraMando} jogos)` : null,
       elegivel_bilhete: false,   // sem odd → nunca em combinada
-      justificativa: `${(probFinal * 100).toFixed(0)}% pelo modelo (${temDC ? 'heurística + Dixon-Coles' : 'só heurística'}), sem linha da API — digite a odd da sua casa.`,
+      justificativa: aguardaOdd
+        ? `${(probFinal * 100).toFixed(0)}% pelo modelo — prêmio improvável (justo @${oddJusta.toFixed(2)}). A casa raramente paga acima disso, mas se a sua ofertar, o veredito confere na hora.`
+        : `${(probFinal * 100).toFixed(0)}% pelo modelo (${temDC ? 'heurística + Dixon-Coles' : 'só heurística'}), sem linha da API — digite a odd da sua casa.`,
     };
   }
 

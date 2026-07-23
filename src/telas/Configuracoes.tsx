@@ -65,7 +65,7 @@ const SECOES: SecaoDef[] = [
   ] },
   { id: 'avancado', titulo: 'Avançado', icone: 'sliders', avancado: true, campos: [
     { key: 'convicao_minima_sem_odd', escopo: 'filtro', ctrl: 'slider', label: 'Convicção mínima sem linha da API', sub: 'Jogo sem preço de mercado só vira card com o modelo bem confiante.', min: 50, max: 75, step: 1, sufixo: '%', metodo: true, padrao: 60 },
-    { key: 'odd_justa_minima_sem_odd', escopo: 'filtro', ctrl: 'slider', label: 'Odd justa mínima sem linha', sub: 'Abaixo disso o prêmio é inexistente — a casa não paga acima do justo.', min: 1.10, max: 1.50, step: 0.05, metodo: true, padrao: 1.25 },
+    { key: 'odd_justa_minima_sem_odd', escopo: 'filtro', ctrl: 'slider', label: 'Odd justa mínima sem linha', sub: 'Abaixo disso o prêmio é improvável — a entrada não some, só recolhe em AGUARDA ODD (campo ativo).', min: 1.10, max: 1.50, step: 0.05, metodo: true, padrao: 1.25 },
     { key: 'divergencia_maxima_pp', escopo: 'filtro', ctrl: 'slider', label: 'Divergência máxima entre os modelos', sub: 'Se heurística e Dixon-Coles discordam mais que isso, descarta.', min: 3, max: 20, step: 1, sufixo: ' p.p.', metodo: true, padrao: 10 },
     { key: 'ev_teto_suspeito', escopo: 'filtro', ctrl: 'slider', label: 'Teto de vantagem plausível', sub: 'Vantagem acima disso é erro de modelo/odd defasada, não oportunidade.', min: 20, max: 60, step: 1, sufixo: '%', metodo: true, padrao: 35 },
     { key: 'ah_vantagem_minima_pp', escopo: 'filtro', ctrl: 'slider', label: 'Handicap: vantagem mínima vs Dixon-Coles', sub: 'Só monta handicap com essa folga sobre a matriz de placares.', min: 1, max: 10, step: 1, sufixo: ' p.p.', metodo: true, padrao: 3 },
