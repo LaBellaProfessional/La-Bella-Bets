@@ -3,6 +3,9 @@ import {
   brl, rotuloMercado, familiaDoMercado, NOME_FAMILIA, chaveEntrada, faixaNota, explicarNota,
   type Analise, type Bilhete, type Config, type Perna, type Registro, type Rascunho, type NotaComponentes,
 } from '../dados';
+// Veredito da odd digitada: fonte única em _shared (mesma regra do motor). NÃO recalcular aqui —
+// foi o recálculo local, comparando múltiplo de EV contra margem em %, que invertia o veredito.
+import { vereditoOdd } from '../../supabase/functions/_shared/veredito.js';
 
 /**
  * ABA INÍCIO — a tela de DECISÃO, organizada POR JOGO e ORDENADA POR NOTA.
@@ -369,7 +372,7 @@ function CardJogo({
     p.confianca === 'CONFIANCA_MAXIMA' && !p.amostra_curta
       ? (config?.stake_confianca_maxima_pct ?? 5)
       : (config?.stake_padrao_pct ?? 3);
-  const evMinimo = config?.filtros?.ev_minimo ?? 1.03;
+  const evMinimo = config?.filtros?.ev_minimo ?? 3; // % inteiro (formato unificado 22/07), não razão
 
   return (
     <div className="overflow-hidden rounded-xl border border-borda bg-card">
@@ -473,10 +476,9 @@ function LinhaEntrada({
 
   // Vírgula→ponto no MESMO ponto do veredito (não só no insert): "1,68" nunca vira NaN.
   const odd = normalizarOdd(oddCasa) ?? 0;
-  const justo = prob > 0 ? 1 / prob : 0;
-  const valorNaOdd = prob * odd;
-  const vale = valorNaOdd >= evMinimo;
-  const ganho = (valorNaOdd - 1) * 100;
+  // evMinimo em % → o veredito compara ganho% >= ev_minimo%, igual ao motor. Antes comparava
+  // prob*odd (múltiplo ~1.17) contra 3 e invertia: odd acima do justo virava "sem valor".
+  const { justo, ganhoPct: ganho, vale } = vereditoOdd({ prob, odd, evMinimoPct: evMinimo });
   const registrado = estado === 'ok';
   // Teto de implausibilidade MAIS rígido no modo manual: sem preço de mercado pra ancorar,
   // vantagem digitada acima de 25% quase sempre é odd errada (pegou o mercado errado).

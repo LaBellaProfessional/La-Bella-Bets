@@ -5,16 +5,16 @@
   "teto_exposicao_diaria_pct": 8,
   "filtros": {
     "odd_minima_perna": 1.1,
-    "ev_minimo": 1.03,
+    "ev_minimo": 3,
     "divergencia_maxima_pp": 10,
     "amostra_minima_mando": 7,
     "odd_bilhete_min": 1.4,
     "odd_bilhete_max": 1.6,
     "max_bilhetes_dia": 3,
-    "confianca_maxima_prob": 0.8,
-    "confianca_maxima_ev": 0.06,
+    "confianca_maxima_prob": 80,
+    "confianca_maxima_ev": 6,
     "ah_vantagem_minima_pp": 3,
-    "ev_teto_suspeito": 0.35
+    "ev_teto_suspeito": 35
   },
   "pesos_heuristica": {
     "mando": 0.5,

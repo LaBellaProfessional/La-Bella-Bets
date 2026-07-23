@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "test": "node --test",
     "analisar": "node motor/analisar.js",
     "bootstrap": "node motor/bootstrap.js",
     "migrar": "node motor/migrar.js",
