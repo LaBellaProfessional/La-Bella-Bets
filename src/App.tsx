@@ -8,6 +8,7 @@ import {
   useApostarFaro, useMontarBilheteFaro, useConciliarBanca, useRascunhos, useSalvarRascunho, indiceSugestoes, classificarAposta,
   brl, emJogoDe, saldoDaSemana, type Registro,
 } from './dados';
+import { BannerAtualizacao } from './pwa';
 import { Inicio } from './telas/Inicio';
 import { Apostas } from './telas/Apostas';
 import { Analises } from './telas/Analises';
@@ -38,9 +39,16 @@ export default function App() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  if (carregandoSessao) return <div className="flex min-h-screen items-center justify-center bg-fundo text-t3">…</div>;
-  if (!sessao) return <Login />;
-  return <Dash />;
+  // Banner de atualização SEMPRE montado (login e dash): a checagem ativa não pode depender de
+  // estar logado, e o SW novo pode chegar em qualquer tela.
+  return (
+    <>
+      <BannerAtualizacao />
+      {carregandoSessao
+        ? <div className="flex min-h-screen items-center justify-center bg-fundo text-t3">…</div>
+        : !sessao ? <Login /> : <Dash />}
+    </>
+  );
 }
 
 function Dash() {

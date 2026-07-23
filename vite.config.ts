@@ -1,9 +1,20 @@
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
+import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 
 const DIR_DADOS = path.resolve(__dirname, 'data');
+
+// VERSÃO DO BUILD — hash curto do commit + data, injetada via `define`. É o que o rodapé do
+// Config mostra pra "que versão você está vendo?" nunca mais ser adivinhação. Best-effort: sem
+// git (ou build fora do repo), cai pra 'dev'.
+const versaoBuild = (() => {
+  try { return execSync('git rev-parse --short HEAD', { cwd: __dirname }).toString().trim(); }
+  catch { return 'dev'; }
+})();
+const dataBuild = new Date().toISOString().slice(0, 16).replace('T', ' ');
 
 const ler = (arq: string, padrao: unknown) => {
   try { return JSON.parse(fs.readFileSync(path.join(DIR_DADOS, arq), 'utf8')); } catch { return padrao; }
@@ -51,4 +62,31 @@ function apiDados(): Plugin {
   };
 }
 
-export default defineConfig({ plugins: [react(), apiDados()] });
+export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(versaoBuild),
+    __APP_BUILT__: JSON.stringify(dataBuild),
+  },
+  plugins: [
+    react(),
+    apiDados(),
+    // PWA com atualização CONTROLADA (fim do apagar-e-recriar-atalho). registerType 'prompt':
+    // quando há service worker novo esperando, o app mostra um banner "Nova versão · Atualizar";
+    // o clique faz skipWaiting + reload. A checagem ativa (foco, background, 60min) vive no
+    // hook useRegisterSW em src/pwa.ts. `manifest: false` preserva o public/manifest.webmanifest
+    // que já existe (com os ícones da marca); `injectRegister: null` porque registramos à mão.
+    VitePWA({
+      registerType: 'prompt',
+      injectRegister: null,
+      manifest: false,
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,png,webmanifest}'],
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        // SPA: navegações caem no index.html precacheado; a troca de versão é atômica no update.
+        navigateFallback: '/index.html',
+      },
+      devOptions: { enabled: false },
+    }),
+  ],
+});

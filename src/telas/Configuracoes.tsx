@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAnalistas, useAnalistaAcao, type Config } from '../dados';
+import { VERSAO_APP, BUILD_APP } from '../pwa';
 
 /**
  * CONFIG — linguagem humana + controles certos por tipo.
@@ -147,6 +148,10 @@ export function Configuracoes({ config, onSalvar }: { config: Config; onSalvar: 
 
       <p className="pt-1 text-center text-[11px] leading-snug text-t3">
         As chaves de API ficam no <code className="text-azul">.env</code> do servidor, nunca aqui.
+      </p>
+      {/* Versão do build — "que versão você está vendo?" nunca mais é adivinhação. */}
+      <p className="text-center text-[10px] text-t3">
+        versão <span className="font-mono">{VERSAO_APP}</span> · {BUILD_APP}
       </p>
     </div>
   );
