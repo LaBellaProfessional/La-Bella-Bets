@@ -74,6 +74,13 @@ export function calcularNota(p, { mandoPleno = 7 } = {}) {
     maturidade: r1(maturidade), horizonte: r1(horizonte),
     divergencia_pp: divergencia_pp == null ? null : r1(divergencia_pp),
   };
-  const nota = clamp(Math.round(concordancia + ev + amostra + maturidade + horizonte), 0, 100);
+  // TETO "UM OLHO SÓ" (calibração 23/07): sem odd de mercado, sem 2º modelo (Dixon-Coles nulo) e
+  // NÃO escanteio → é heurística pura, sem âncora nenhuma. O retrovisor sozinho superestima "não
+  // perder" de time empatador de liga fraca (caso Santa Fe x Caracas: 86% / justa @1.17, quando o
+  // mercado real dá ~54%). Nota teto 40: nunca sai do EXPLORAR — um modelo só não afirma solidez.
+  const familiaEscanteios = familiaDoMercado(p.mercado) === 'escanteios';
+  const umOlho = Boolean(p.sem_odd_referencia) && p.prob_dixon_coles == null && !familiaEscanteios;
+  const notaBruta = Math.round(concordancia + ev + amostra + maturidade + horizonte);
+  const nota = clamp(umOlho ? Math.min(notaBruta, 40) : notaBruta, 0, 100);
   return { nota, componentes };
 }

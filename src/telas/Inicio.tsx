@@ -247,6 +247,11 @@ function CardEntrada({
   const semOdd = Boolean(p.sem_odd_referencia);
   const oddRef = semOdd ? (p.odd_justa ?? 0) : (p.odd ?? 0);
   const prob = p.prob_final ?? p.prob_heuristica ?? 0;
+  // UM OLHO SÓ (calibração 23/07): sem odd de mercado E sem Dixon-Coles E não escanteio → a
+  // estimativa é só o retrovisor, sem âncora (caso Santa Fe x Caracas). Convicção exibida trava em
+  // ~70%, a justa vira FAIXA e o veredito julga contra a ponta conservadora — precisão falsa é pior
+  // que imprecisão honesta.
+  const umOlho = semOdd && !p.dixon_coles_disponivel && !String(p.mercado).startsWith('esc_');
   const evMinimo = config?.filtros?.ev_minimo ?? 3;
   const stakeDefault = +(((config?.banca ?? 1000) * (config?.stake_padrao_pct ?? 3)) / 100).toFixed(2);
 
@@ -274,7 +279,13 @@ function CardEntrada({
   }, [oddCasa, stake, tocou]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const odd = normalizarOdd(oddCasa) ?? 0;
-  const { justo, ganhoPct: ganho, vale } = vereditoOdd({ prob, odd, evMinimoPct: evMinimo });
+  // No "um olho só": convicção mostrada trava em ~70%, justa vira faixa [justaBaixa, justaAlta], e o
+  // veredito julga contra a ponta conservadora (justaAlta). Fora disso, comportamento inalterado.
+  const probMostrar = umOlho ? Math.min(prob, 0.70) : prob;
+  const probConserv = umOlho ? Math.max(0.30, probMostrar - 0.20) : prob;
+  const justaBaixa = probMostrar > 0 ? +(1 / probMostrar).toFixed(2) : 0;
+  const justaAlta = probConserv > 0 ? +(1 / probConserv).toFixed(2) : 0;
+  const { justo, ganhoPct: ganho, vale } = vereditoOdd({ prob: probConserv, odd, evMinimoPct: evMinimo });
   const teto = notaPalavra(p.nota);
   const nAnalistas = analistasConcordam(p, contexto);
   const laranja = contexto?.consenso_laranja;
@@ -320,8 +331,12 @@ function CardEntrada({
           )}
         </div>
 
-        {/* Porquê em 1 frase */}
-        <p className="mt-1 text-[13px] leading-snug text-t2">{frasePorque(p)}</p>
+        {/* Porquê em 1 frase (ou a ressalva honesta do "um olho só"). */}
+        <p className="mt-1 text-[13px] leading-snug text-t2">
+          {umOlho
+            ? `Estimativa só pelo retrovisor (~${Math.round(probMostrar * 100)}%) — sem a matemática dos elencos nem preço de mercado pra conferir.`
+            : frasePorque(p)}
+        </p>
 
         {/* 1 badge (a mais importante) — esperar/aguarda/consenso; resto no drill-down */}
         <div className="mt-1.5 min-h-[0]">
@@ -348,11 +363,19 @@ function CardEntrada({
             />
           </div>
           <div className={`mt-1.5 text-xs leading-snug ${odd <= 1 ? 'text-t3' : vale ? 'text-verde' : 'text-vermelho'}`}>
-            {odd <= 1
-              ? `O justo aqui é @${justo.toFixed(2)} — chance real de ${(prob * 100).toFixed(0)}%`
-              : vale
-                ? `Vale — @${odd.toFixed(2)} paga acima do que a chance real justifica (+${ganho.toFixed(1)}%)`
-                : `Nessa odd não compensa — o justo é @${justo.toFixed(2)}`}
+            {umOlho ? (
+              odd <= 1
+                ? `Justa incerta — algo entre @${justaBaixa.toFixed(2)} e @${justaAlta.toFixed(2)}. Só um modelo, sem preço pra conferir; registre se sua casa pagar acima disso.`
+                : vale
+                  ? `Ainda vale — @${odd.toFixed(2)} paga acima até da ponta conservadora (@${justaAlta.toFixed(2)}).`
+                  : `Justa incerta (entre @${justaBaixa.toFixed(2)} e @${justaAlta.toFixed(2)}) — nessa odd, melhor só acima de @${justaAlta.toFixed(2)}.`
+            ) : (
+              odd <= 1
+                ? `O justo aqui é @${justo.toFixed(2)} — chance real de ${(prob * 100).toFixed(0)}%`
+                : vale
+                  ? `Vale — @${odd.toFixed(2)} paga acima do que a chance real justifica (+${ganho.toFixed(1)}%)`
+                  : `Nessa odd não compensa — o justo é @${justo.toFixed(2)}`
+            )}
           </div>
         </div>
 
