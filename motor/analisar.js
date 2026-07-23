@@ -5,6 +5,7 @@
  *   npm run analisar              → analisa hoje
  *   npm run analisar -- 2026-07-25 → analisa a data informada
  *   npm run analisar -- --demo     → força modo demo mesmo com chaves
+ *   npm run analisar -- --sem-odd  → liga o modo odd-manual (paridade com a edge)
  *
  * Pipeline: fixtures → histórico (cache) → heurística → Dixon-Coles → filtros → montador.
  * Grava data/analises/YYYY-MM-DD.json com TUDO: aprovados, descartados com motivo, bilhetes.
@@ -14,18 +15,25 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 
-import { probHeuristica } from './lib/heuristica.js';
-import { ajustarDixonColes, matrizPlacares, mercadosDaMatriz } from './lib/dixonColes.js';
-import { avaliarPerna } from './lib/filtros.js';
-import { montarBilhetes, cardsHandicap } from './lib/montador.js';
-import { contagensDoJogo } from './lib/narrativa.js';
-import { temChaves, gerarDemo, lerCache, gravarCache, buscarJogosDoDia, buscarHistoricoTime, buscarOddsDosJogos, cota, limitacoesPlano } from './lib/fontes.js';
+// Fonte única do motor: supabase/functions/_shared. O CLI e a edge function importam
+// exatamente os mesmos módulos — nada de motor/lib duplicado (divergência silenciosa de
+// 21-22/07 nasceu de manter duas cópias). Os módulos são JS puro, portáveis Node/Deno.
+import { probHeuristica } from '../supabase/functions/_shared/heuristica.js';
+import { ajustarDixonColes, matrizPlacares, mercadosDaMatriz } from '../supabase/functions/_shared/dixonColes.js';
+import { avaliarPerna } from '../supabase/functions/_shared/filtros.js';
+import { montarBilhetes, cardsHandicap } from '../supabase/functions/_shared/montador.js';
+import { contagensDoJogo } from '../supabase/functions/_shared/narrativa.js';
+import { temChaves, gerarDemo, lerCache, gravarCache, buscarJogosDoDia, buscarHistoricoTime, buscarOddsDosJogos, cota, limitacoesPlano } from '../supabase/functions/_shared/fontes.js';
 
 const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DIR_DADOS = path.join(RAIZ, 'data');
 
 const args = process.argv.slice(2);
 const forcarDemo = args.includes('--demo');
+// Paridade com a edge: liga o modo odd-manual (jogos sem linha da API avaliados pelos
+// modelos, sob piso de convicção + justa mínima). Sem a flag, sem-odd é descartado — igual
+// ao default de avaliarPerna. Útil pra debugar localmente o mesmo caminho que roda no dash.
+const permitirSemOdd = args.includes('--sem-odd');
 const dataAlvo = args.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a)) ?? new Date().toISOString().slice(0, 10);
 
 const cfg = JSON.parse(fs.readFileSync(path.join(DIR_DADOS, 'config.json'), 'utf8'));
@@ -40,6 +48,7 @@ async function main() {
   log(`\n🎯 BELLA BETS — análise de ${dataAlvo}  [modo ${modo.toUpperCase()}]`);
   if (modo === 'demo') log('   (sem chaves de API — dados simulados, determinísticos por data)\n');
   else log('');
+  if (permitirSemOdd) log('   ⚙ modo odd-manual LIGADO — jogos sem linha da API avaliados pelos modelos\n');
 
   // ── 1. Dados
   let jogos, historico, h2h, odds;
@@ -147,6 +156,7 @@ async function main() {
           probPush: mercado === 'ah_casa_m10' ? (probsDC?.ah_casa_m10_push ?? 0) : 0,
           amostraMando: h.amostra_mando,
           filtros: { ...cfg.filtros, mercados_em_bilhete: cfg.mercados_em_bilhete },
+          permitirSemOdd,
         })
       );
     }
