@@ -25,6 +25,42 @@ export function rotuloMercado(mercado: string): string {
   return `${m[2] === 'over' ? 'Over' : 'Under'} ${linha.toFixed(1)}${m[1] ? ' esc.' : ''}`;
 }
 
+/**
+ * NOME DO MERCADO EM LINGUAGEM HUMANA (A Grande Simplificação) — primeira camada da tela.
+ * Nada de "DC casa (1X)" nem "Over 2.5": "Não perder em casa (1X)", "Mais de 2 gols e meio".
+ * O `rotuloMercado` técnico continua existindo pro que grava/histórico; isto é só a CASCA.
+ */
+export function mercadoHumano(mercado: string): string {
+  const fixos: Record<string, string> = {
+    dupla_chance_casa: 'Não perder em casa (1X)',
+    dupla_chance_fora: 'Não perder fora (X2)',
+    resultado_casa: 'Vitória da casa (1)',
+    resultado_fora: 'Vitória do visitante (2)',
+    ah_casa_m05: 'Casa vence (handicap −0,5)',
+    ah_casa_m10: 'Casa vence por 2+ (handicap −1)',
+    ah_fora_p05: 'Visitante não perde (handicap +0,5)',
+  };
+  if (fixos[mercado]) return fixos[mercado];
+  const m = /^(esc_)?(over|under)_(\d+)$/.exec(mercado ?? '');
+  if (!m) return rotuloMercado(mercado);
+  const d = m[3];
+  const linha = Number(d.slice(0, -1) || '0') + Number(d.slice(-1)) / 10;
+  const inteiro = Math.floor(linha);
+  const nomeLinha = linha < 1 ? 'meio' : `${inteiro} e meio`;
+  const coisa = m[1] ? (linha < 2 ? 'escanteio' : 'escanteios') : (linha < 2 ? 'gol' : 'gols');
+  return `${m[2] === 'over' ? 'Mais de' : 'Menos de'} ${nomeLinha} ${coisa}`;
+}
+
+/** Nota em PALAVRA + cor: FORTE (verde, 80+) · BOA (azul, 60-79) · EXPLORAR (cinza, <60). */
+export function notaPalavra(nota: number | null | undefined): {
+  palavra: string; texto: string; borda: string; fundo: string;
+} {
+  const n = nota ?? 0;
+  if (n >= 80) return { palavra: 'FORTE', texto: 'text-verde', borda: 'border-verde', fundo: 'bg-verde/15' };
+  if (n >= 60) return { palavra: 'BOA', texto: 'text-azul', borda: 'border-azul', fundo: 'bg-azul/15' };
+  return { palavra: 'EXPLORAR', texto: 'text-t3', borda: 'border-borda', fundo: 'bg-fundo' };
+}
+
 export type Familia = 'resultado' | 'gols' | 'escanteios';
 
 export function familiaDoMercado(mercado: string): Familia {

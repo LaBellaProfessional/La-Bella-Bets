@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 import { Login } from './Login';
 import {
-  useConfig, useDatas, useAnalise, useBilhetes, useSugestoes,
+  useConfig, useBilhetes, useSugestoes,
   useAlterarResultado, useSalvarConfig, useRodarMotor, useJanelaCompleta, useRegistrarEntrada,
   useApostarFaro, useMontarBilheteFaro, useConciliarBanca, useRascunhos, useSalvarRascunho, indiceSugestoes, classificarAposta,
   brl, emJogoDe, saldoDaSemana, type Registro,
@@ -11,16 +11,16 @@ import {
 import { BannerAtualizacao } from './pwa';
 import { Inicio } from './telas/Inicio';
 import { Apostas } from './telas/Apostas';
-import { Analises } from './telas/Analises';
 import { Historico } from './telas/Historico';
 import { Configuracoes } from './telas/Configuracoes';
 
-type Aba = 'inicio' | 'apostas' | 'analises' | 'historico' | 'config';
+// A GRANDE SIMPLIFICAÇÃO: a aba Análises deixou de existir — o conteúdo dela vive nos drill-downs
+// da Início ("ver análise completa"). "Placar" é a fusão do Histórico (resultado/tripulação/calibração).
+type Aba = 'inicio' | 'apostas' | 'historico' | 'config';
 const ABAS: { id: Aba; nome: string }[] = [
   { id: 'inicio', nome: 'Início' },
   { id: 'apostas', nome: 'Apostas' },
-  { id: 'analises', nome: 'Análises' },
-  { id: 'historico', nome: 'Histórico' },
+  { id: 'historico', nome: 'Placar' },
   { id: 'config', nome: 'Config' },
 ];
 
@@ -53,19 +53,11 @@ export default function App() {
 
 function Dash() {
   const [aba, setAba] = useState<Aba>('inicio');
-  const [dataSel, setDataSel] = useState<string | null>(null);
 
   const qConfig = useConfig();
-  const qDatas = useDatas();
   const config = qConfig.data;
-  const datas = qDatas.data;
-  // A aba chama-se Hoje: tem que abrir em HOJE, nao na data mais recente da lista (que hoje
-  // e D+3 por causa da janela). So cai pra mais recente se ainda nao existir analise de hoje.
   const hojeISO = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }))
     .toISOString().slice(0, 10);
-  const data = dataSel ?? (datas?.includes(hojeISO) ? hojeISO : datas?.[0]) ?? null;
-  const qAnalise = useAnalise(data);
-  const analise = qAnalise.data;
   const { data: bilhetes } = useBilhetes();
   const { data: sugestoes } = useSugestoes();
   const { data: rascunhos } = useRascunhos();
@@ -81,7 +73,7 @@ function Dash() {
 
   // Falha de consulta NAO pode virar tela vazia: sem isso, 'sem dado' e 'sem conexao'
   // ficam iguais na tela e o diagnostico vira advinhacao.
-  const erroQuery = qConfig.error ?? qDatas.error ?? qAnalise.error;
+  const erroQuery = qConfig.error ?? qJanela.error;
 
   const registrar = useRegistrarEntrada();
   const apostarFaro = useApostarFaro();
@@ -116,15 +108,6 @@ function Dash() {
           </span>
 
           <div className="ml-auto flex items-center gap-2">
-            {/* Seletor de data só onde faz sentido escolher um dia: Análises e Histórico. */}
-            {datas && datas.length > 0 && (aba === 'analises' || aba === 'historico') && (
-              <select
-                value={data ?? ''} onChange={(e) => setDataSel(e.target.value)}
-                className="rounded border border-borda bg-card px-2 py-1 text-xs text-t2 outline-none"
-              >
-                {datas.map((d) => <option key={d} value={d}>{d}</option>)}
-              </select>
-            )}
             {/* Chip da banca consolidada — sempre visível, popover com as camadas. */}
             <ChipBanca banca={config?.banca ?? 0} registros={bilhetes ?? []} />
             {/* Ações que antes eram botões soltos, agora no menu. */}
@@ -188,7 +171,6 @@ function Dash() {
             onConciliar={(saldoCasa, emJogo) => conciliar.mutateAsync({ bancaAtual: config.banca, emJogo, saldoCasa })}
           />
         )}
-        {aba === 'analises' && <Analises analise={analise ?? null} />}
         {aba === 'historico' && config && (
           <Historico
             registros={(bilhetes ?? []).map((b) => ({ ...b, stake_rs: b.stake_real })) as never}

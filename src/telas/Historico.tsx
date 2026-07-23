@@ -46,9 +46,9 @@ export function Historico({
 
   return (
     <div className="space-y-6">
-      {/* Subabas: apostas reais · sugestões virtuais · analistas (placar + tripulação). */}
+      {/* Placar: meu resultado (real) · tripulação (forças) · calibração (sugestões virtuais). */}
       <div className="flex gap-1 overflow-x-auto border-b border-borda">
-        {([['apostas', 'Suas apostas'], ['sugestoes', 'Sugestões'], ['analistas', 'Analistas']] as [Subaba, string][]).map(([id, nome]) => (
+        {([['apostas', 'Meu resultado'], ['analistas', 'Tripulação'], ['sugestoes', 'Calibração']] as [Subaba, string][]).map(([id, nome]) => (
           <button
             key={id} onClick={() => setSub(id)}
             className={`whitespace-nowrap px-3 py-2 text-sm transition-colors ${
@@ -63,7 +63,7 @@ export function Historico({
       {sub === 'apostas' && (
       <div className="space-y-4">
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <h2 className="text-sm font-bold uppercase tracking-widest text-t2">Suas apostas</h2>
+        <h2 className="text-sm font-bold uppercase tracking-widest text-t2">Meu resultado</h2>
         <span className="rounded bg-verde/15 px-2 py-0.5 text-[10px] uppercase tracking-wider text-verde">real</span>
       </div>
       <div className="rounded-lg border border-ambar/40 bg-ambar/10 px-4 py-3 text-center text-sm text-ambar">

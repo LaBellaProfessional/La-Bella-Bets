@@ -15,7 +15,7 @@ import { SecaoContextoAnalistas } from '../componentes/ContextoAnalistas';
  */
 
 /* ── tradução dos motivos: o porquê em vez do código ─────────────────────── */
-function traduzirMotivo(motivo: string): string {
+export function traduzirMotivo(motivo: string): string {
   if (/sem odd/i.test(motivo)) return 'A casa não abriu linha pra esse jogo';
   if (/amostra insuficiente/i.test(motivo)) return 'Poucos jogos no mando nessa temporada pra confiar no padrão';
   if (/modelos divergem/i.test(motivo)) return 'O retrovisor (últimos jogos) e a matemática (força dos elencos) discordam — melhor ficar de fora';
@@ -37,8 +37,8 @@ function traduzirMotivo(motivo: string): string {
  */
 const ordemDaPerna = (p: Perna) => (p.aprovada && !p.radar ? 0 : p.radar ? 1 : 2);
 
-type Contagem = { n: number; venceu: number; empatou: number; perdeu: number; nao_perdeu: number; over15: number };
-type Contagens = { casa: { time: string; mando: Contagem; geral: Contagem }; fora: { time: string; mando: Contagem; geral: Contagem } };
+export type Contagem = { n: number; venceu: number; empatou: number; perdeu: number; nao_perdeu: number; over15: number };
+export type Contagens = { casa: { time: string; mando: Contagem; geral: Contagem }; fora: { time: string; mando: Contagem; geral: Contagem } };
 
 /* ── veredito do jogo em palavras ────────────────────────────────────────── */
 
@@ -61,7 +61,7 @@ function listarFamilias(pernas: Perna[]): string {
  * bug do sistema e destrói a confiança na tela. A família citada aqui sempre bate com as
  * pernas aprovadas listadas abaixo.
  */
-function vereditoDoJogo(pernas: Perna[]): { texto: string; cor: string } {
+export function vereditoDoJogo(pernas: Perna[]): { texto: string; cor: string } {
   if (!pernas.length) return { texto: 'Nada avaliado neste jogo', cor: 'text-t3' };
 
   const aprovadas = pernas.filter((p) => p.aprovada && !p.radar);
@@ -84,7 +84,7 @@ function vereditoDoJogo(pernas: Perna[]): { texto: string; cor: string } {
 }
 
 /* ── o porquê, com contagens ─────────────────────────────────────────────── */
-function porqueDoJogo(c: Contagens | undefined, casa: string): string | null {
+export function porqueDoJogo(c: Contagens | undefined, casa: string): string | null {
   if (!c?.casa?.mando || !c?.fora?.mando) return null;
   const partes: string[] = [];
 
@@ -107,7 +107,7 @@ function porqueDoJogo(c: Contagens | undefined, casa: string): string | null {
 }
 
 /* ── chip de mercado com semáforo textual ────────────────────────────────── */
-function chipDoMercado(p: Perna): { icone: string; cor: string; texto: string } {
+export function chipDoMercado(p: Perna): { icone: string; cor: string; texto: string } {
   const nome = rotuloMercado(p.mercado);
   const chance = p.prob_final != null ? ` modelo vê ${(p.prob_final * 100).toFixed(0)}%` : '';
   const justo = p.prob_final ? ` (justo seria @${(1 / p.prob_final).toFixed(2)})` : '';
@@ -250,7 +250,7 @@ export function Analises({ analise }: { analise: Analise | null }) {
  * e pro dedo é a mesma coisa. No celular o mesmo dado vira lista empilhada; no desktop
  * continua tabela, que é onde comparar linha a linha vale a pena.
  */
-function TabelaNumeros({ pernas }: { pernas: Perna[] }) {
+export function TabelaNumeros({ pernas }: { pernas: Perna[] }) {
   return (
     <>
       <div className="mt-2 space-y-1.5 sm:hidden">
