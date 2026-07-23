@@ -56,16 +56,50 @@ export interface Perna {
   // entra aprovada, mas o dash a recolhe numa seção discreta abaixo dos aprovados, campo de odd
   // ativo, veredito normal ao digitar. Só organiza a tela, nunca bloqueia o registro.
   aguarda_odd?: boolean;
-  // Proveniência da entrada, quando registrada fora do fluxo do método (Parte B).
+  // Proveniência da entrada, quando registrada fora do fluxo do método (Parte B / ressurreição).
   origem?: 'metodo' | 'maikon_faro' | 'analistas';
   stake_pct?: number; stake_rs?: number;
   nota?: number; nota_componentes?: NotaComponentes | null;
+  // CAMADA DE ANALISTAS (Parte A): nota antes do ajuste + o ajuste decomposto ("Nota 74 = modelo
+  // 70, analistas +4"). ressuscitada = voltou dos mortos pelo consenso; trava_analistas = fato
+  // consensual contrariou uma aprovada e travou a stake no piso.
+  nota_base?: number; analistas_ajuste?: number; analistas_componentes?: AjusteAnalistas | null;
+  analistas_teto_solida?: boolean;
+  ressuscitada?: boolean; motivo_ressurreicao?: string;
+  trava_analistas?: string;
   sem_linha?: boolean;   // jogo sem linha da API (modo odd manual) — agrupa em seção própria
 }
 
 export interface NotaComponentes {
   concordancia: number; ev: number; amostra: number; maturidade: number; horizonte: number;
   divergencia_pp: number | null;
+}
+
+/* ─────────────────────── CAMADA DE ANALISTAS (Parte A) ─────────────────────── */
+
+export type TipoExtracao = 'fato' | 'opiniao' | 'dado_citado';
+export interface ExtracaoResumo {
+  analista: string; tipo: TipoExtracao; categoria: string; texto: string;
+  mercado: string | null; direcao: 'a_favor' | 'contra' | 'neutro' | null;
+  conviccao: 'baixa' | 'media' | 'alta' | null; data: string | null; manual?: boolean;
+}
+export interface ContextoAnalistas {
+  fatos: ExtracaoResumo[]; dados_citados: ExtracaoResumo[]; opinioes: ExtracaoResumo[];
+  consenso_laranja: { categoria: string; n_analistas: number; textos: string[] } | null;
+}
+export interface AjusteAnalistas {
+  a_favor: number; contra: number; consenso: boolean;
+  soma_favor: number; soma_contra: number; ajuste_pos: number; ajuste_neg: number;
+  opinioes: { analista_id: string; direcao: string; conviccao: string; texto: string }[];
+}
+export interface Analista {
+  id: string; nome: string; canal_youtube: string; url: string; ativo: boolean;
+  peso_atual: number; observacao: string | null;
+}
+export interface AnalistaPlacar {
+  id: string; nome: string; canal_youtube: string; ativo: boolean; peso_atual: number;
+  n_liquidados: number; n_ganhou: number; n_pendentes: number;
+  acerto: number | null; lucro_virtual: number; n_com_odd: number;
 }
 
 /** Faixa/cor da nota: 80+ verde (sólida) · 60-79 azul (média) · <60 cinza (fraca). */
@@ -118,6 +152,9 @@ export interface Analise {
   horizonte_dias?: number;
   cards_handicap: (Perna & { vantagem_pp: number; stake_rs: number; observacao: string })[];
   avisos?: string[];
+  // CAMADA DE ANALISTAS: contexto por jogo (chave = partida "Casa x Fora") e ressuscitadas do dia.
+  analistas_por_jogo?: Record<string, ContextoAnalistas>;
+  analistas_ressuscitadas?: { partida: string; mercado: string; n_fontes: number }[];
 }
 
 /** Foto do que o MÉTODO dizia quando o Maikon apostou por faro — pra medir o faro CONTRA o método. */
@@ -523,6 +560,65 @@ export function useSugestoes() {
       return (data ?? []) as SugestaoLiquidada[];
     },
   });
+}
+
+/* ─────────────────────── CAMADA DE ANALISTAS — queries/mutations ─────────────────────── */
+
+/** Placar por analista (view analista_placar). Vazio/erro devolve [] — a tela nunca cai por isso. */
+export function useAnalistaPlacar() {
+  return useQuery<AnalistaPlacar[]>({
+    queryKey: ['analista-placar'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('analista_placar').select('*').order('peso_atual', { ascending: false });
+      if (error) return [];
+      return (data ?? []) as AnalistaPlacar[];
+    },
+  });
+}
+
+/** Lista de analistas cadastrados (Config). Best-effort: sem a tabela ainda, devolve []. */
+export function useAnalistas() {
+  return useQuery<Analista[]>({
+    queryKey: ['analistas'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('analistas').select('*').order('nome');
+      if (error) return [];
+      return (data ?? []) as Analista[];
+    },
+  });
+}
+
+/** Adiciona / ativa-desativa / remove canal. Uma mutation só, por ação — a tela decide qual. */
+export function useAnalistaAcao() {
+  const qc = useQueryClient();
+  const inval = () => { qc.invalidateQueries({ queryKey: ['analistas'] }); qc.invalidateQueries({ queryKey: ['analista-placar'] }); };
+  return {
+    criar: useMutation({
+      mutationFn: async (a: { nome: string; canal_youtube: string; url: string }) => {
+        const canal = a.canal_youtube.trim().startsWith('@') ? a.canal_youtube.trim() : `@${a.canal_youtube.trim()}`;
+        const { error } = await supabase.from('analistas').insert({
+          nome: a.nome.trim(), canal_youtube: canal,
+          url: a.url.trim() || `https://youtube.com/${canal}`,
+        });
+        if (error) throw error;
+      },
+      onSuccess: inval,
+    }),
+    alternar: useMutation({
+      mutationFn: async ({ id, ativo }: { id: string; ativo: boolean }) => {
+        const { error } = await supabase.from('analistas').update({ ativo }).eq('id', id);
+        if (error) throw error;
+      },
+      onSuccess: inval,
+    }),
+    remover: useMutation({
+      mutationFn: async (id: string) => {
+        const { error } = await supabase.from('analistas').delete().eq('id', id);
+        if (error) throw error;
+      },
+      onSuccess: inval,
+    }),
+  };
 }
 
 /** Analises dos proximos dias (D+1..D+3) — alimenta 'oportunidades antecipadas'. */

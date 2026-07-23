@@ -1,7 +1,12 @@
-import { brl, rotuloMercado, type Config, type Registro, type SugestaoLiquidada } from '../dados';
+import { useState } from 'react';
+import {
+  brl, rotuloMercado, useAnalistaPlacar,
+  type Config, type Registro, type SugestaoLiquidada, type AnalistaPlacar,
+} from '../dados';
 import { DesempenhoSugestoes } from './DesempenhoSugestoes';
 
 type RegistroUI = Registro & { stake_rs: number };
+type Subaba = 'apostas' | 'sugestoes' | 'analistas';
 
 /**
  * A tela que decide se o método sobrevive ao próprio dono. Sem amostra, ROI é ruído:
@@ -14,6 +19,7 @@ export function Historico({
   sugestoes: SugestaoLiquidada[];
   onResultado: (id: string, r: 'ganhou' | 'perdeu') => void;
 }) {
+  const [sub, setSub] = useState<Subaba>('apostas');
   // Cancelada ("não apostei") não é aposta real: fora de toda estatística e da lista.
   const reais = registros.filter((r) => r.resultado !== 'cancelada');
   const fechados = reais.filter((r) => r.resultado === 'ganhou' || r.resultado === 'perdeu');
@@ -39,7 +45,22 @@ export function Historico({
   const serie = [b, ...pontos];
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Subabas: apostas reais · sugestões virtuais · analistas (placar + tripulação). */}
+      <div className="flex gap-1 overflow-x-auto border-b border-borda">
+        {([['apostas', 'Suas apostas'], ['sugestoes', 'Sugestões'], ['analistas', 'Analistas']] as [Subaba, string][]).map(([id, nome]) => (
+          <button
+            key={id} onClick={() => setSub(id)}
+            className={`whitespace-nowrap px-3 py-2 text-sm transition-colors ${
+              sub === id ? 'border-b-2 border-rosa font-semibold text-t1' : 'text-t3 hover:text-t2'
+            }`}
+          >
+            {nome}
+          </button>
+        ))}
+      </div>
+
+      {sub === 'apostas' && (
       <div className="space-y-4">
       <div className="flex flex-wrap items-baseline gap-x-2">
         <h2 className="text-sm font-bold uppercase tracking-widest text-t2">Suas apostas</h2>
@@ -96,11 +117,161 @@ export function Historico({
         )}
       </div>
       </div>
+      )}
 
-      {/* Bloco VIRTUAL, separado por um respiro grande e um divisor: paper trading nunca se
-          mistura com as apostas reais de cima. */}
-      <div className="border-t border-borda pt-6">
-        <DesempenhoSugestoes sugestoes={sugestoes} />
+      {/* Bloco VIRTUAL: paper trading nunca se mistura com as apostas reais. */}
+      {sub === 'sugestoes' && <DesempenhoSugestoes sugestoes={sugestoes} />}
+
+      {/* ANALISTAS: tripulação (comparativo das forças) + placar por analista. */}
+      {sub === 'analistas' && <SubabaAnalistas reais={reais} sugestoes={sugestoes} />}
+    </div>
+  );
+}
+
+/**
+ * SUBABA ANALISTAS (Parte A4): o comparativo da TRIPULAÇÃO — cada força medida lado a lado,
+ * nenhuma descartada — e o placar por analista (acerto, ROI virtual, peso, tendência).
+ *
+ * As cinco forças:
+ *   MODELO         — as sugestões virtuais (o que a matemática sozinha prometeu).
+ *   MAIKON+MÉTODO  — apostas reais registradas pelo fluxo do método.
+ *   MAIKON FARO    — apostas reais por convicção própria, contra ou além do método.
+ *   ANALISTAS      — palpites dos canais, liquidados contra o placar real.
+ *   RESSUSCITADAS  — entradas que só voltaram pelo consenso dos analistas.
+ */
+function SubabaAnalistas({ reais, sugestoes }: { reais: RegistroUI[]; sugestoes: SugestaoLiquidada[] }) {
+  const { data: placar } = useAnalistaPlacar();
+
+  // Colunas reais (Maikon) por origem.
+  const porOrigem = (o: Registro['origem']) =>
+    reais.filter((r) => (r.origem ?? 'metodo') === o && (r.resultado === 'ganhou' || r.resultado === 'perdeu'));
+  const metodo = agregarReais(porOrigem('metodo'));
+  const faro = agregarReais(porOrigem('maikon_faro'));
+  const ressus = agregarReais(porOrigem('analistas'));
+
+  // MODELO: sugestões virtuais liquidadas (ROI só onde havia odd de mercado).
+  const sugLiq = sugestoes.filter((s) => s.status === 'ganhou' || s.status === 'perdeu');
+  const sugGanhou = sugLiq.filter((s) => s.status === 'ganhou').length;
+  const sugComOdd = sugLiq.filter((s) => s.odd_e_mercado);
+  const modeloLucro = sugComOdd.reduce((s, x) => s + (x.status === 'ganhou' ? x.odd_referencia - 1 : -1), 0);
+  const modelo: Forca = {
+    n: sugLiq.length, acerto: sugLiq.length ? sugGanhou / sugLiq.length : null,
+    resultado: sugComOdd.length ? modeloLucro : null, unidade: 'u', clv: null,
+  };
+
+  // ANALISTAS: soma do placar (acerto e lucro virtual só onde havia odd).
+  const somaAnalistas = (placar ?? []).reduce(
+    (a, p) => ({
+      liq: a.liq + p.n_liquidados, ganhou: a.ganhou + p.n_ganhou,
+      lucro: a.lucro + Number(p.lucro_virtual), comOdd: a.comOdd + p.n_com_odd,
+    }),
+    { liq: 0, ganhou: 0, lucro: 0, comOdd: 0 },
+  );
+  const analistas: Forca = {
+    n: somaAnalistas.liq, acerto: somaAnalistas.liq ? somaAnalistas.ganhou / somaAnalistas.liq : null,
+    resultado: somaAnalistas.comOdd ? somaAnalistas.lucro : null, unidade: 'u', clv: null,
+  };
+
+  const tripulacao: { rotulo: string; cor: string; f: Forca }[] = [
+    { rotulo: 'MODELO', cor: 'text-azul', f: modelo },
+    { rotulo: 'MAIKON+MÉTODO', cor: 'text-t1', f: metodo },
+    { rotulo: 'MAIKON FARO', cor: 'text-roxo', f: faro },
+    { rotulo: 'ANALISTAS', cor: 'text-laranja', f: analistas },
+    { rotulo: 'RESSUSCITADAS', cor: 'text-laranja', f: ressus },
+  ];
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <div className="mb-2 flex flex-wrap items-baseline gap-x-2">
+          <h2 className="text-sm font-bold uppercase tracking-widest text-t2">A tripulação</h2>
+          <span className="text-[11px] text-t3">cada força medida, nenhuma descartada</span>
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {tripulacao.map((t) => <CardForca key={t.rotulo} rotulo={t.rotulo} cor={t.cor} f={t.f} />)}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-2 flex flex-wrap items-baseline gap-x-2">
+          <h2 className="text-sm font-bold uppercase tracking-widest text-t2">Placar por analista</h2>
+          <span className="rounded bg-laranja/15 px-2 py-0.5 text-[10px] uppercase tracking-wider text-laranja">virtual</span>
+        </div>
+        {!(placar ?? []).length ? (
+          <div className="rounded-xl border border-borda bg-card px-4 py-8 text-center text-sm text-t3">
+            Nenhum analista com palpite liquidado ainda. Assim que o pipeline (ou o bootstrap manual)
+            popular extrações e os jogos terminarem, o placar aparece aqui.
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-borda bg-card divide-y divide-borda/60">
+            {(placar ?? []).map((a) => <LinhaAnalista key={a.id} a={a} />)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface Forca { n: number; acerto: number | null; resultado: number | null; unidade: 'R$' | 'u'; clv: number | null }
+
+/** Agrega apostas reais resolvidas: acerto, lucro em R$, e CLV médio (odd real vs a que o modelo viu). */
+function agregarReais(regs: RegistroUI[]): Forca {
+  const ganhou = regs.filter((r) => r.resultado === 'ganhou').length;
+  const lucro = regs.reduce((s, r) => s + (r.resultado === 'ganhou' ? r.retorno_rs - r.stake_rs : -r.stake_rs), 0);
+  const comRef = regs.filter((r) => r.odd_referencia != null && Number(r.odd_referencia) > 0);
+  const clv = comRef.length
+    ? comRef.reduce((s, r) => s + (r.odd_total / Number(r.odd_referencia) - 1), 0) / comRef.length : null;
+  return { n: regs.length, acerto: regs.length ? ganhou / regs.length : null, resultado: regs.length ? lucro : null, unidade: 'R$', clv };
+}
+
+function CardForca({ rotulo, cor, f }: { rotulo: string; cor: string; f: Forca }) {
+  const resStr = f.resultado == null ? '—'
+    : f.unidade === 'R$' ? `${f.resultado >= 0 ? '+' : '−'}${brl(Math.abs(f.resultado))}`
+    : `${f.resultado >= 0 ? '+' : '−'}${Math.abs(f.resultado).toFixed(1)}u`;
+  return (
+    <div className="rounded-lg border border-borda bg-card px-3 py-3">
+      <div className={`text-[11px] font-bold uppercase tracking-wider ${cor}`}>{rotulo}</div>
+      {f.n === 0 ? (
+        <div className="mt-1 text-xs text-t3">sem amostra ainda</div>
+      ) : (
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+          <span className="text-lg font-semibold text-t1">{f.acerto == null ? '—' : `${(f.acerto * 100).toFixed(0)}%`}</span>
+          <span className="text-[10px] text-t3">acerto · {f.n}</span>
+          <span className={`text-sm font-semibold ${(f.resultado ?? 0) >= 0 ? 'text-verde' : 'text-vermelho'}`}>{resStr}</span>
+          {f.clv != null && (
+            <span className={`text-[10px] ${f.clv >= 0 ? 'text-verde' : 'text-vermelho'}`}>
+              CLV {f.clv >= 0 ? '+' : ''}{(f.clv * 100).toFixed(1)}%
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LinhaAnalista({ a }: { a: AnalistaPlacar }) {
+  const acerto = a.acerto == null ? null : Number(a.acerto);
+  return (
+    <div className="px-4 py-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div className="min-w-0">
+          <span className="text-sm font-medium text-t1">{a.nome}</span>
+          <span className="ml-2 text-[11px] text-t3">{a.canal_youtube}</span>
+          {!a.ativo && <span className="ml-2 rounded bg-borda px-1.5 text-[9px] uppercase text-t3">inativo</span>}
+        </div>
+        <span className="rounded bg-azul/15 px-2 py-0.5 text-[10px] font-semibold text-azul" title="peso atual (2..15)">
+          peso {Number(a.peso_atual).toFixed(1)}
+        </span>
+      </div>
+      <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[11px] text-t3">
+        <span>{a.n_liquidados} liquidados</span>
+        {a.n_pendentes > 0 && <span>· {a.n_pendentes} pendentes</span>}
+        <span>· acerto <b className="text-t2">{acerto == null ? '—' : `${(acerto * 100).toFixed(0)}%`}</b></span>
+        {a.n_com_odd > 0 && (
+          <span>· ROI virtual <b className={Number(a.lucro_virtual) >= 0 ? 'text-verde' : 'text-vermelho'}>
+            {Number(a.lucro_virtual) >= 0 ? '+' : '−'}{Math.abs(Number(a.lucro_virtual)).toFixed(1)}u
+          </b> ({a.n_com_odd} c/ odd)</span>
+        )}
       </div>
     </div>
   );

@@ -16,6 +16,7 @@
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 // @ts-nocheck
 import { resultadoSugestao } from '../_shared/sugestoes.js';
+import { liquidarPalpiteAnalista, recalibrarPeso } from '../_shared/analistas.js';
 import { chaveFootball } from '../_shared/fontes.js';
 
 const sb = createClient(
@@ -74,7 +75,16 @@ Deno.serve(async (req) => {
     const { data: pendentes } = await sb.from('sugestoes_liquidadas')
       .select('*').eq('status', 'pendente').lte('data', hoje);
 
-    if (!pendentes?.length) {
+    // PALPITES DOS ANALISTAS pendentes (best-effort: tabela pode não existir ainda). Liquidam
+    // no MESMO placar das sugestões — só somam ids à busca de fixtures, não custam requests extras.
+    let palpites: any[] = [];
+    try {
+      const { data } = await sb.from('analista_palpites_liquidados')
+        .select('*').eq('status', 'pendente').lte('data', hoje);
+      palpites = (data ?? []).filter((p) => p.no_nosso_motor && p.jogo_id);
+    } catch { /* sem camada de analistas ainda */ }
+
+    if (!pendentes?.length && !palpites.length) {
       await sb.from('execucoes').update({ terminado_em: new Date().toISOString(), ok: true, detalhe: { nada: true } }).eq('id', exec?.id);
       return json({ ok: true, liquidadas: 0, pendentes: 0, msg: 'nada pendente de dias anteriores' });
     }
@@ -84,7 +94,7 @@ Deno.serve(async (req) => {
     // parâmetro `date` da API filtra por dia UTC — um jogo 21:35 SP é 00:35 UTC do dia seguinte
     // e sumiria da consulta do "seu" dia. Buscar pelos ids exatos não tem ambiguidade nenhuma.
     // A API aceita até 20 ids por chamada (ids=1-2-3), então some poucas requisições no total.
-    const ids = [...new Set(pendentes.map((s) => String(s.jogo_id)))];
+    const ids = [...new Set([...pendentes ?? [], ...palpites].map((s) => String(s.jogo_id)))];
     const placar: Record<string, { status: string; gc: number; gf: number }> = {};
     for (let i = 0; i < ids.length; i += 20) {
       const lote = ids.slice(i, i + 20);
@@ -102,7 +112,7 @@ Deno.serve(async (req) => {
     // 2) Escanteios — cache primeiro; só os jogos com sugestão de escanteio PENDENTE e ainda
     // ausentes do cache é que geram uma chamada avulsa.
     const precisaEsc = new Set(
-      pendentes.filter((s) => s.familia === 'escanteios').map((s) => String(s.jogo_id)),
+      [...pendentes ?? [], ...palpites].filter((s) => s.familia === 'escanteios').map((s) => String(s.jogo_id)),
     );
     const escTotal: Record<string, number> = {};
     if (precisaEsc.size) {
@@ -126,7 +136,7 @@ Deno.serve(async (req) => {
     // 3) Liquida uma a uma.
     let liquidadas = 0, semDado = 0;
     const porResultado = { ganhou: 0, perdeu: 0 };
-    for (const s of pendentes) {
+    for (const s of pendentes ?? []) {
       const pl = placar[String(s.jogo_id)];
       if (!pl || !FINALIZADO.has(pl.status)) { semDado++; continue; }
 
@@ -145,7 +155,47 @@ Deno.serve(async (req) => {
       porResultado[r]++;
     }
 
-    const detalhe = { liquidadas, por_resultado: porResultado, sem_dado_ainda: semDado, req_football: reqs, ms: Date.now() - t0 };
+    // 4) PALPITES DOS ANALISTAS: liquidam no mesmo placar, respeitando a DIREÇÃO (contra inverte).
+    let palpitesLiq = 0;
+    const analistasTocados = new Set<string>();
+    for (const p of palpites) {
+      const pl = placar[String(p.jogo_id)];
+      if (!pl || !FINALIZADO.has(pl.status)) continue;
+      const r = liquidarPalpiteAnalista(p, {
+        golsCasa: pl.gc, golsFora: pl.gf,
+        escanteiosTotal: p.familia === 'escanteios' ? escTotal[String(p.jogo_id)] ?? null : null,
+      });
+      if (r == null) continue;                 // ainda falta o dado
+      await sb.from('analista_palpites_liquidados').update({
+        status: r, gols_casa: pl.gc, gols_fora: pl.gf,
+        escanteios_total: p.familia === 'escanteios' ? escTotal[String(p.jogo_id)] ?? null : null,
+        liquidado_em: new Date().toISOString(),
+      }).eq('id', p.id);
+      palpitesLiq++;
+      analistasTocados.add(p.analista_id);
+    }
+
+    // 5) PESO DINÂMICO: recalibra os analistas que tiveram palpite liquidado agora. Compara acerto
+    // ao implícito médio das odds (só palpites com odd de mercado), a cada 30. Nunca zera (piso 2).
+    const pesos: any[] = [];
+    for (const aid of analistasTocados) {
+      const { data: liq } = await sb.from('analista_palpites_liquidados')
+        .select('status,odd_referencia,odd_e_mercado')
+        .eq('analista_id', aid).in('status', ['ganhou', 'perdeu']).eq('odd_e_mercado', true);
+      const rows = liq ?? [];
+      const nComOdd = rows.length;
+      const acerto = nComOdd ? rows.filter((r) => r.status === 'ganhou').length / nComOdd : null;
+      const implicitoMedio = nComOdd
+        ? rows.reduce((s, r) => s + (r.odd_referencia ? 1 / Number(r.odd_referencia) : 0), 0) / nComOdd : null;
+      const { data: a } = await sb.from('analistas').select('peso_atual').eq('id', aid).single();
+      const rec = recalibrarPeso({ acerto, implicitoMedio, nComOdd, pesoAtual: Number(a?.peso_atual ?? 8) });
+      if (rec.mudou) {
+        await sb.from('analistas').update({ peso_atual: rec.peso }).eq('id', aid);
+        pesos.push({ analista_id: aid, peso: rec.peso, edge_pp: rec.edge_pp });
+      }
+    }
+
+    const detalhe = { liquidadas, palpites_analistas: palpitesLiq, pesos_recalibrados: pesos, por_resultado: porResultado, sem_dado_ainda: semDado, req_football: reqs, ms: Date.now() - t0 };
     await sb.from('execucoes').update({ terminado_em: new Date().toISOString(), ok: true, req_football: reqs, detalhe }).eq('id', exec?.id);
     return json({ ok: true, ...detalhe });
   } catch (e) {

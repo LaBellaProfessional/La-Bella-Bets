@@ -23,6 +23,10 @@ import { contagensDoJogo } from '../_shared/narrativa.js';
 import { sugestaoDaPerna } from '../_shared/sugestoes.js';
 import { calcularNota } from '../_shared/nota.js';
 import {
+  indexarExtracoes, ajusteDaPerna, aplicarAjusteNota, fatosConsensuais,
+  ressurreicoesPossiveis, palpiteDaExtracao,
+} from '../_shared/analistas.js';
+import {
   temChaves, gerarDemo, buscarJogosDoDia, buscarHistoricoTime,
   buscarOddsDosJogos, cota, limitacoesPlano,
 } from '../_shared/fontes.js';
@@ -205,6 +209,24 @@ Deno.serve(async (req) => {
     // ── 5. Uma análise por dia da janela
     const { data: trajRows } = await sb.from('odds_trajetoria').select('*');
     const traj = Object.fromEntries((trajRows ?? []).map((t) => [`${t.jogo_id}|${t.mercado}`, t]));
+
+    // ── 5b. CAMADA DE ANALISTAS: extrações da janela + peso por analista. Best-effort — se as
+    // tabelas ainda não existirem (migração não aplicada), segue sem analistas. NUNCA derruba a
+    // análise. As extrações vêm por jogo_data dentro da janela; casamos com o fixture por partida.
+    let extracoesJanela: any[] = [];
+    let pesoPorAnalista: Record<string, number> = {};
+    let nomePorAnalista: Record<string, string> = {};
+    try {
+      const [{ data: exs }, { data: ans }] = await Promise.all([
+        sb.from('analista_extracoes').select('*').gte('jogo_data', datas[0]).lte('jogo_data', datas[datas.length - 1]),
+        sb.from('analistas').select('id,nome,peso_atual,ativo'),
+      ]);
+      const ativos = new Set((ans ?? []).filter((a) => a.ativo).map((a) => a.id));
+      extracoesJanela = (exs ?? []).filter((e) => ativos.has(e.analista_id));
+      pesoPorAnalista = Object.fromEntries((ans ?? []).map((a) => [a.id, Number(a.peso_atual)]));
+      nomePorAnalista = Object.fromEntries((ans ?? []).map((a) => [a.id, a.nome]));
+    } catch { /* sem camada de analistas ainda — segue */ }
+
     const porDia: any[] = [];
 
     for (const [iDia, dataAlvo] of datas.entries()) {
@@ -300,14 +322,82 @@ Deno.serve(async (req) => {
         }
       }
 
+      // ── CAMADA DE ANALISTAS (por dia) ──────────────────────────────────────────────────────
+      // Casa cada extração da janela com um jogo do dia pela PARTIDA (o pipeline nem sempre tem o
+      // fixture id quando processa o vídeo). Só as que casam entram; o resto fica pra outro dia.
+      const partidaToId: Record<string, string> = {};
+      for (const j of jogos) partidaToId[`${j.casa} x ${j.fora}`] = j.id;
+      const exsDia = extracoesJanela
+        .filter((e: any) => e.partida && partidaToId[e.partida])
+        .map((e: any) => ({ ...e, jogo_id: partidaToId[e.partida] }));
+      const idxAnalistas = indexarExtracoes(exsDia);
+      const resumoExtracao = (e: any) => ({
+        analista: nomePorAnalista[e.analista_id] ?? '—',
+        tipo: e.tipo, categoria: e.categoria, texto: e.texto_resumo,
+        mercado: e.mercado_alvo ?? null, direcao: e.direcao ?? null, conviccao: e.conviccao ?? null,
+        data: e.jogo_data ?? (e.criado_em ? String(e.criado_em).slice(0, 10) : null),
+        manual: e.processado_por === 'manual_bootstrap',
+      });
+
+      // CLÁUSULA DA RESSURREIÇÃO: reprovada SÓ por divergência de modelos + consenso forte a favor
+      // (3 analistas, convicção alta) volta REBAIXADA, stake no piso, origem 'analistas'.
+      const reprovadasDia = pernas.filter((p: any) => !p.aprovada);
+      const ressuscitadas: any[] = [];
+      for (const r of ressurreicoesPossiveis(reprovadasDia, idxAnalistas.porMercado)) {
+        const alvo = pernas.find((p: any) => p.jogo_id === r.jogo_id && p.mercado === r.mercado && !p.aprovada);
+        if (!alvo) continue;
+        alvo.aprovada = true;
+        alvo.confianca = 'REBAIXADA';
+        alvo.origem = 'analistas';
+        alvo.ressuscitada = true;
+        alvo.elegivel_bilhete = false;
+        alvo.motivo_ressurreicao = `${r.n_fontes} analistas (convicção alta) a favor — reprovada só por divergência de modelos`;
+        alvo.justificativa = `Ressuscitada pelo consenso dos analistas — confiança rebaixada, stake no piso. ${alvo.motivo_ressurreicao}.`;
+        ressuscitadas.push({ partida: alvo.partida, mercado: alvo.mercado, n_fontes: r.n_fontes });
+      }
+
+      // FATOS CONSENSUAIS (2+ analistas, mesma categoria/jogo, <48h) → alerta laranja no card. Se
+      // um fato consensual CONTRARIA uma entrada aprovada, trava a stake no piso e anota o motivo.
+      const consenso = fatosConsensuais(exsDia.filter((e: any) => e.tipo === 'fato'), Date.now());
+      const alertaPorPartida: Record<string, any> = {};
+      for (const c of consenso) {
+        alertaPorPartida[c.partida] = c;
+        for (const ct of c.contra) {
+          const alvo = pernas.find((p: any) => p.partida === c.partida && p.mercado === ct.mercado && p.aprovada);
+          if (!alvo) continue;
+          if (alvo.confianca === 'CONFIANCA_MAXIMA') alvo.confianca = 'APROVADA';
+          alvo.trava_analistas = `fato consensual (${c.n_analistas} analistas · ${c.categoria}) contraria: ${ct.texto} — stake travada no piso`;
+        }
+      }
+
+      // Contexto por jogo pro card (fatos / dados citados / opiniões + alerta laranja).
+      const analistasPorJogo: Record<string, any> = {};
+      for (const [partida, ctx] of idxAnalistas.porJogo.entries()) {
+        const a = alertaPorPartida[partida];
+        analistasPorJogo[partida] = {
+          fatos: ctx.fatos.map(resumoExtracao),
+          dados_citados: ctx.dados_citados.map(resumoExtracao),
+          opinioes: ctx.opinioes.map(resumoExtracao),
+          consenso_laranja: a ? { categoria: a.categoria, n_analistas: a.n_analistas, textos: a.textos } : null,
+        };
+      }
+
       // NOTA DE CONFIANÇA (0-100): determinística, atribuída a cada perna ANTES de montar os
       // bilhetes, pra que as pernas dentro de um bilhete já carreguem a nota. Grava também os
-      // componentes pro detalhamento na tela.
+      // componentes pro detalhamento na tela. O ajuste dos analistas entra AQUI, decomposto e
+      // assimétrico, com trava do verde (o palpite não leva a nota sozinho pra 80+).
       const mandoPleno = (cfg.filtros as any).mando_pleno ?? 7;
       for (const p of pernas) {
         const { nota, componentes } = calcularNota(p, { mandoPleno });
-        p.nota = nota;
+        const opsMercado = idxAnalistas.porMercado.get(`${p.jogo_id}|${p.mercado}`) ?? [];
+        const { ajuste, componentes: compA } = ajusteDaPerna(p, opsMercado, pesoPorAnalista);
+        const ap = aplicarAjusteNota(nota, ajuste);
+        p.nota = ap.nota;
+        p.nota_base = ap.nota_base;
         p.nota_componentes = componentes;
+        p.analistas_ajuste = ap.ajuste || 0;
+        p.analistas_componentes = compA;
+        p.analistas_teto_solida = ap.teto_solida;
       }
 
       const aprovadas = pernas.filter((p) => p.aprovada);
@@ -341,6 +431,10 @@ Deno.serve(async (req) => {
         sem_bilhete: resultado.sem_bilhete ? { motivo: resultado.motivo } : null,
         exposicao: resultado.exposicao ?? null,
         cards_handicap: cardsAH, avisos,
+        // CAMADA DE ANALISTAS: contexto por jogo (fatos/dados/opiniões + alerta laranja) e as
+        // entradas ressuscitadas pelo consenso. O card e o placar leem daqui, casando por partida.
+        analistas_por_jogo: analistasPorJogo,
+        analistas_ressuscitadas: ressuscitadas,
       };
 
       await sb.from('analises').upsert({ data: dataAlvo, modo, resumo, payload, gerado_em: new Date().toISOString() });
@@ -363,6 +457,27 @@ Deno.serve(async (req) => {
         }
       } catch (e) {
         avisos.push(`captura de sugestões falhou: ${e instanceof Error ? e.message : e}`);
+      }
+
+      // PALPITES DOS ANALISTAS: cada opinião com mercado_alvo vira linha de placar virtual, com a
+      // odd do dia como referência quando o mercado é do nosso motor e a linha existe. A liquidação
+      // é do cron (liquidar-sugestoes). Best-effort — não derruba a análise.
+      try {
+        const palpites = exsDia
+          .filter((e: any) => e.tipo === 'opiniao' && e.mercado_alvo)
+          .map((e: any) => {
+            const oddRef = odds[partidaToId[e.partida]]?.[e.mercado_alvo] ?? null;
+            const pal = palpiteDaExtracao(e, { oddReferencia: oddRef });
+            if (!pal) return null;
+            pal.data = e.jogo_data ?? dataAlvo;
+            pal.jogo_id = partidaToId[e.partida] ?? pal.jogo_id;
+            pal.peso_no_registro = pesoPorAnalista[e.analista_id] ?? null;
+            return pal;
+          })
+          .filter(Boolean);
+        if (palpites.length) await sb.from('analista_palpites_liquidados').upsert(palpites, { onConflict: 'extracao_id' });
+      } catch (e) {
+        avisos.push(`captura de palpites de analistas falhou: ${e instanceof Error ? e.message : e}`);
       }
 
       porDia.push({ data: dataAlvo, horizonte, ...resumo });

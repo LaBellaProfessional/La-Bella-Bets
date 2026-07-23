@@ -3,8 +3,9 @@ import {
   brl, rotuloMercado, familiaDoMercado, NOME_FAMILIA, chaveEntrada, faixaNota, explicarNota,
   snapshotDaPerna, metodoDiria,
   type Analise, type Bilhete, type Config, type Perna, type Registro, type Rascunho, type NotaComponentes,
-  type SnapshotMetodo,
+  type SnapshotMetodo, type ContextoAnalistas,
 } from '../dados';
+import { SecaoContextoAnalistas } from '../componentes/ContextoAnalistas';
 // Veredito da odd digitada: fonte única em _shared (mesma regra do motor). NÃO recalcular aqui —
 // foi o recálculo local, comparando múltiplo de EV contra margem em %, que invertia o veredito.
 import { vereditoOdd } from '../../supabase/functions/_shared/veredito.js';
@@ -125,7 +126,10 @@ type Entrada =
 const pernasDe = (e: Entrada) => (e.tipo === 'bilhete' ? e.bilhete.pernas : [e.perna]);
 const jogosDe = (e: Entrada) => [...new Set(pernasDe(e).map((p) => p.partida))];
 
-interface InfoNota { nota: number | null; comp: NotaComponentes | null; escanteio: boolean }
+interface InfoNota {
+  nota: number | null; comp: NotaComponentes | null; escanteio: boolean;
+  base: number | null; ajuste: number; ressuscitada: boolean; trava: string | null;
+}
 
 function DiaBloco({
   analise, config, registrados, registrosPendentes, rascunhos, onRegistrar, onApostarFaro, onSalvarRascunho,
@@ -152,12 +156,18 @@ function DiaBloco({
   const infoEntrada = (e: Entrada): InfoNota => {
     const ps = pernasDe(e).map((x) => infoPorPerna.get(`${x.jogo_id}|${x.mercado}`)).filter(Boolean) as Perna[];
     const comNota = ps.filter((p) => typeof p.nota === 'number');
-    if (!comNota.length) return { nota: null, comp: null, escanteio: false };
+    if (!comNota.length) return { nota: null, comp: null, escanteio: false, base: null, ajuste: 0, ressuscitada: false, trava: null };
     const min = comNota.reduce((a, b) => ((a.nota ?? 0) <= (b.nota ?? 0) ? a : b));
+    // Ressurreição/trava: se QUALQUER perna da entrada carrega a marca, a entrada carrega.
+    const ressuscitada = ps.some((p) => p.ressuscitada);
+    const trava = ps.map((p) => p.trava_analistas).find(Boolean) ?? null;
     return {
       nota: min.nota ?? null,
       comp: min.nota_componentes ?? null,
       escanteio: familiaDoMercado(min.mercado) === 'escanteios' || Boolean(min.sem_odd_referencia),
+      base: min.nota_base ?? min.nota ?? null,
+      ajuste: min.analistas_ajuste ?? 0,
+      ressuscitada, trava,
     };
   };
   const notaOrd = (e: Entrada) => infoEntrada(e).nota ?? -1;
@@ -333,6 +343,7 @@ function DiaBloco({
                 subtitulo={[p0.liga, p0.hora].filter(Boolean).join(' · ')}
                 entradas={lista} notaJogo={notaJogo >= 0 ? notaJogo : null}
                 infoEntrada={infoEntrada} config={config} rascunhos={rascunhos}
+                contexto={analise.analistas_por_jogo?.[partida]}
                 onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
               />
             );
@@ -360,6 +371,7 @@ function DiaBloco({
                       entradas={lista} notaJogo={notaJogo >= 0 ? notaJogo : null}
                       infoEntrada={infoEntrada} config={config} rascunhos={rascunhos}
                       travarSemOdd={jaTemSemOdd}
+                      contexto={analise.analistas_por_jogo?.[partida]}
                       onRegistrar={onRegistrar} onSalvarRascunho={onSalvarRascunho}
                     />
                   );
@@ -622,11 +634,12 @@ function BadgeNota({ nota }: { nota: number }) {
 }
 
 function CardJogo({
-  data, titulo, subtitulo, entradas, notaJogo, infoEntrada, config, rascunhos, travarSemOdd, onRegistrar, onSalvarRascunho,
+  data, titulo, subtitulo, entradas, notaJogo, infoEntrada, config, rascunhos, travarSemOdd, contexto, onRegistrar, onSalvarRascunho,
 }: {
   data: string; titulo: string; subtitulo: string; entradas: Entrada[]; notaJogo: number | null;
   infoEntrada: (e: Entrada) => InfoNota;
   config?: Config; rascunhos: Map<string, Rascunho>; travarSemOdd?: boolean;
+  contexto?: ContextoAnalistas | null;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
   onSalvarRascunho: SalvarRascunho;
 }) {
@@ -651,6 +664,13 @@ function CardJogo({
         {/* NOTA DO JOGO: a maior entre as entradas, no canto superior direito. */}
         {notaJogo != null && <BadgeNota nota={notaJogo} />}
       </div>
+
+      {/* CONTEXTO DOS ANALISTAS: fatos/dados/opiniões + alerta laranja de fato consensual. */}
+      {contexto && (
+        <div className="border-b border-borda px-4 py-3">
+          <SecaoContextoAnalistas contexto={contexto} />
+        </div>
+      )}
 
       <div className="divide-y divide-borda">
         {entradas.map((e) => {
@@ -678,6 +698,10 @@ function CardJogo({
               nota={info.nota}
               notaComp={info.comp}
               notaEscanteio={info.escanteio}
+              notaBase={info.base}
+              notaAjuste={info.ajuste}
+              ressuscitada={info.ressuscitada}
+              travaAnalistas={info.trava}
               bilheteMultiplo={ehBilhete && e.bilhete.n_pernas > 1}
               travado={Boolean(travarSemOdd && semOdd)}
               rascunho={rascunhos.get(chaveEntrada(data, pernas))}
@@ -694,6 +718,7 @@ function CardJogo({
 function LinhaEntrada({
   data, pernas, rotulo, tipo, familia, oddReferencia, prob, stakePct, stakeRS,
   confiancaMaxima, rebaixada, evMinimo, semOdd, nota, notaComp, notaEscanteio, bilheteMultiplo, travado,
+  notaBase, notaAjuste, ressuscitada, travaAnalistas,
   rascunho, onRegistrar, onSalvarRascunho,
 }: {
   data: string; pernas: Perna[]; rotulo: string; tipo: string; familia: string;
@@ -701,6 +726,7 @@ function LinhaEntrada({
   confiancaMaxima: boolean; rebaixada: boolean; evMinimo: number;
   semOdd?: boolean; nota: number | null; notaComp: NotaComponentes | null;
   notaEscanteio: boolean; bilheteMultiplo: boolean; travado?: boolean; rascunho?: Rascunho;
+  notaBase?: number | null; notaAjuste?: number; ressuscitada?: boolean; travaAnalistas?: string | null;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
   onSalvarRascunho: SalvarRascunho;
 }) {
@@ -793,6 +819,17 @@ function LinhaEntrada({
               </div>
             ))}
           </div>
+          {/* Ajuste dos analistas, decomposto e SEMPRE visível: "Nota 74 = modelo 70, analistas +4". */}
+          {notaAjuste != null && notaAjuste !== 0 && notaBase != null && (
+            <div className="mt-1.5 border-t border-borda pt-1.5 text-[11px] leading-snug">
+              <span className="text-t2">
+                Nota {nota} = modelo {notaBase}, analistas{' '}
+                <b className={notaAjuste > 0 ? 'text-verde' : 'text-vermelho'}>
+                  {notaAjuste > 0 ? '+' : '−'}{Math.abs(notaAjuste)}
+                </b>
+              </span>
+            </div>
+          )}
           {bilheteMultiplo && (
             <div className="mt-1.5 border-t border-borda pt-1.5 text-[10px] leading-snug text-t3">
               nota do bilhete = a da perna mais fraca (o conjunto é tão sólido quanto ela)
@@ -813,7 +850,18 @@ function LinhaEntrada({
         {pernas.some((p) => p.amostra_curta) && (
           <span className="rounded bg-ambar/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-ambar">amostra curta</span>
         )}
+        {/* Selo da ENTRADA DOS ANALISTAS (ressuscitada pelo consenso). */}
+        {ressuscitada && (
+          <span className="rounded bg-laranja/15 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-laranja">entrada dos analistas</span>
+        )}
       </div>
+
+      {/* Trava por fato consensual: contrariou a aprovada → stake no piso. */}
+      {travaAnalistas && (
+        <div className="mt-2 rounded border border-laranja/40 bg-laranja/10 px-2 py-1 text-[11px] leading-snug text-laranja">
+          {travaAnalistas}
+        </div>
+      )}
 
       {pernas.length > 1 && (
         <div className="mt-2 space-y-1">

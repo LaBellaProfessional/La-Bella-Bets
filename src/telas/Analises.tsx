@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { pct, rotuloMercado, familiaDoMercado, NOME_FAMILIA, type Analise, type Familia, type Perna } from '../dados';
 import { Vazio } from './Inicio';
+import { SecaoContextoAnalistas } from '../componentes/ContextoAnalistas';
 
 /**
  * ABA ANÁLISES — LINGUAGEM DE APOSTADOR.
@@ -177,6 +178,8 @@ export function Analises({ analise }: { analise: Analise | null }) {
             </div>
 
             <div className="space-y-2 p-4">
+              {/* Contexto dos analistas (fatos/dados/opiniões + alerta laranja) casado por partida. */}
+              <SecaoContextoAnalistas contexto={analise.analistas_por_jogo?.[`${jogo.casa} x ${jogo.fora}`]} />
               {ps.filter(temConteudo).map((p, i) => {
                 const chip = chipDoMercado(p);
                 return (

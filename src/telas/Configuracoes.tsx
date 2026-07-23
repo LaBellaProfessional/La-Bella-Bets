@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Config } from '../dados';
+import { useAnalistas, useAnalistaAcao, type Config } from '../dados';
 
 /**
  * CONFIG — linguagem humana + controles certos por tipo.
@@ -137,6 +137,9 @@ export function Configuracoes({ config, onSalvar }: { config: Config; onSalvar: 
         </SecaoCard>
       ))}
 
+      {/* Camada de analistas: canais do YouTube, com peso e placar próprios. */}
+      <AnalistasBloco />
+
       {/* "salvo ✓" flutuante e discreto. */}
       <div className={`pointer-events-none fixed inset-x-0 bottom-4 flex justify-center transition-opacity ${salvo ? 'opacity-100' : 'opacity-0'}`}>
         <span className="rounded-full border border-verde/40 bg-card px-3 py-1 text-xs font-medium text-verde shadow">salvo ✓</span>
@@ -145,6 +148,82 @@ export function Configuracoes({ config, onSalvar }: { config: Config; onSalvar: 
       <p className="pt-1 text-center text-[11px] leading-snug text-t3">
         As chaves de API ficam no <code className="text-azul">.env</code> do servidor, nunca aqui.
       </p>
+    </div>
+  );
+}
+
+/**
+ * CAMADA DE ANALISTAS (Parte A4) — adicionar/remover/ativar canal, ver peso. Best-effort: sem a
+ * tabela ainda (migração não aplicada), a lista vem vazia e o form apenas falha ao salvar, sem
+ * derrubar a tela. O peso é recalibrado sozinho pelo cron (não é editável à mão — é mérito medido).
+ */
+function AnalistasBloco() {
+  const { data: analistas } = useAnalistas();
+  const { criar, alternar, remover } = useAnalistaAcao();
+  const [aberta, setAberta] = useState(false);
+  const [nome, setNome] = useState('');
+  const [canal, setCanal] = useState('');
+  const [erro, setErro] = useState<string | null>(null);
+  const lista = analistas ?? [];
+
+  async function adicionar() {
+    setErro(null);
+    if (!nome.trim() || !canal.trim()) { setErro('nome e canal são obrigatórios'); return; }
+    try { await criar.mutateAsync({ nome, canal_youtube: canal, url: '' }); setNome(''); setCanal(''); }
+    catch (e) { setErro(e instanceof Error ? e.message : String(e)); }
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-borda bg-card">
+      <button onClick={() => setAberta((v) => !v)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
+        <Icone nome="list" className="h-4 w-4 shrink-0 text-rosa" />
+        <span className="flex-1 text-sm font-semibold text-t1">Analistas</span>
+        <span className="text-[11px] text-t3">{lista.length}</span>
+        <Icone nome="chevron" className={`h-4 w-4 shrink-0 text-t3 transition-transform ${aberta ? '' : '-rotate-90'}`} />
+      </button>
+      {aberta && (
+        <div className="border-t border-borda px-4 py-3">
+          <div className="mb-3 text-[11px] leading-snug text-t3">
+            Canais do YouTube que alimentam o contexto. O peso (2..15) recalibra sozinho a cada 30
+            palpites — mérito medido, não ajuste manual. Ingestão roda no PC (ver README).
+          </div>
+
+          <div className="space-y-2">
+            {lista.map((a) => (
+              <div key={a.id} className="flex items-center gap-2 rounded-lg border border-borda bg-fundo px-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm text-t1">{a.nome}</div>
+                  <div className="truncate text-[11px] text-t3">{a.canal_youtube} · peso {Number(a.peso_atual).toFixed(1)}</div>
+                </div>
+                <button
+                  onClick={() => alternar.mutate({ id: a.id, ativo: !a.ativo })}
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                    a.ativo ? 'bg-verde/15 text-verde' : 'bg-borda text-t3'}`}
+                >
+                  {a.ativo ? 'ativo' : 'inativo'}
+                </button>
+                <button onClick={() => remover.mutate(a.id)} className="text-t3 hover:text-vermelho" aria-label="remover">
+                  <Icone nome="restaurar" className="h-3.5 w-3.5 rotate-45" />
+                </button>
+              </div>
+            ))}
+            {!lista.length && <div className="text-xs text-t3">Nenhum canal ainda (ou migração não aplicada).</div>}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <input
+              value={nome} onChange={(e) => setNome(e.target.value)} placeholder="nome"
+              className="min-w-0 flex-1 rounded border border-borda bg-fundo px-2 py-1.5 text-sm text-t1 outline-none focus:border-azul"
+            />
+            <input
+              value={canal} onChange={(e) => setCanal(e.target.value)} placeholder="@canal"
+              className="min-w-0 flex-1 rounded border border-borda bg-fundo px-2 py-1.5 text-sm text-t1 outline-none focus:border-azul"
+            />
+            <button onClick={adicionar} className="rounded bg-rosa px-3 py-1.5 text-sm font-semibold text-white">Adicionar</button>
+          </div>
+          {erro && <div className="mt-2 text-[11px] text-vermelho">{erro}</div>}
+        </div>
+      )}
     </div>
   );
 }
