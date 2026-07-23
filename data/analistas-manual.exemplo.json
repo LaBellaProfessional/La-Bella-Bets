@@ -1,0 +1,71 @@
+{
+  "_nota": "TEMPLATE / DEMONSTRAÇÃO do bootstrap manual (Parte 3). O metadado do vídeo do Freitas é REAL (id, título e data vieram do RSS do canal em 23/07). As EXTRAÇÕES abaixo são DEMONSTRATIVAS — servem pra validar a cadeia (card → nota → placar) e mostrar o formato exato (MENOR=alta, MAIOR=media, bilhete quebrado em pernas, fato consensual, dado citado, mercado fora do motor). NÃO são a transcrição real dos palpites do Freitas (a transcrição depende do PC — a assinatura do timedtext é presa ao IP). Para valer: copie este arquivo pra data/analistas-manual.json, troque as `partida` pelos jogos REAIS da janela de hoje (têm que bater com `Casa x Fora` das fixtures) e os textos pelo conteúdo real do vídeo. As linhas entram marcadas processado_por='manual_bootstrap' e aparecem com o selo 'manual' no card.",
+  "videos": [
+    {
+      "canal_youtube": "@freitastipster",
+      "video_id": "UvLktenl4us",
+      "video_titulo": "PALPITES DE FUTEBOL QUINTA 23/07 + ANÁLISE COMPLETA DOS JOGOS | 18+",
+      "data_video": "2026-07-22T20:43:51Z",
+      "url": "https://www.youtube.com/watch?v=UvLktenl4us",
+      "extracoes": [
+        {
+          "tipo": "fato", "categoria": "desfalque",
+          "partida": "Bolívar x Grêmio", "jogo_data": "2026-07-25",
+          "texto_resumo": "[DEMO] zagueiro titular do Grêmio suspenso — desfalque confirmado pra o jogo em altitude",
+          "mercado_alvo": "dupla_chance_fora", "direcao": "contra", "conviccao": "alta"
+        },
+        {
+          "tipo": "dado_citado", "categoria": "estatistica",
+          "partida": "Bolívar x Grêmio", "jogo_data": "2026-07-25",
+          "texto_resumo": "[DEMO] média de 2,8 gols nos últimos 10 do Bolívar em casa; árbitro média 4,1 cartões/jogo",
+          "mercado_alvo": null, "direcao": "neutro", "conviccao": "media"
+        },
+        {
+          "tipo": "opiniao", "categoria": "palpite",
+          "partida": "Bolívar x Grêmio", "jogo_data": "2026-07-25",
+          "texto_resumo": "[DEMO] bloco MENOR (segura): over 1.5 no jogo — altitude empurra o placar",
+          "mercado_alvo": "over_15", "direcao": "a_favor", "conviccao": "alta"
+        },
+        {
+          "tipo": "opiniao", "categoria": "palpite",
+          "partida": "Bolívar x Grêmio", "jogo_data": "2026-07-25",
+          "texto_resumo": "[DEMO] bloco MAIOR (odd alta): dupla chance casa + over 2.5 — perna 1 do bilhete",
+          "mercado_alvo": "dupla_chance_casa", "direcao": "a_favor", "conviccao": "media"
+        },
+        {
+          "tipo": "opiniao", "categoria": "palpite",
+          "partida": "Bolívar x Grêmio", "jogo_data": "2026-07-25",
+          "texto_resumo": "[DEMO] bloco MAIOR (odd alta): dupla chance casa + over 2.5 — perna 2 do bilhete",
+          "mercado_alvo": "over_25", "direcao": "a_favor", "conviccao": "media"
+        },
+        {
+          "tipo": "opiniao", "categoria": "palpite",
+          "partida": "Bolívar x Grêmio", "jogo_data": "2026-07-25",
+          "texto_resumo": "[DEMO] mercado fora do nosso motor: mais de 4.5 cartões (conta no placar do analista, não modula nota)",
+          "mercado_alvo": "cartoes_over_45", "direcao": "a_favor", "conviccao": "media"
+        }
+      ]
+    },
+    {
+      "canal_youtube": "@BOLEIROSTIPS",
+      "video_id": "DEMO-BOLEIROS-2307",
+      "video_titulo": "[DEMO] Palpites do dia — 23/07",
+      "data_video": "2026-07-23T12:00:00Z",
+      "url": "https://www.youtube.com/@BOLEIROSTIPS",
+      "extracoes": [
+        {
+          "tipo": "fato", "categoria": "desfalque",
+          "partida": "Bolívar x Grêmio", "jogo_data": "2026-07-25",
+          "texto_resumo": "[DEMO] confirma o desfalque do zagueiro titular do Grêmio (2º analista → consenso, alerta laranja)",
+          "mercado_alvo": "dupla_chance_fora", "direcao": "contra", "conviccao": "alta"
+        },
+        {
+          "tipo": "opiniao", "categoria": "palpite",
+          "partida": "Bolívar x Grêmio", "jogo_data": "2026-07-25",
+          "texto_resumo": "[DEMO] concorda com o over 1.5 (2º analista a favor → ajuste de consenso na nota)",
+          "mercado_alvo": "over_15", "direcao": "a_favor", "conviccao": "media"
+        }
+      ]
+    }
+  ]
+}

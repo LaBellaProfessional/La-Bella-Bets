@@ -78,6 +78,63 @@ editáveis pelo dash. Para referência, as análises de **24/07 e 26/07** foram 
 `odd_bilhete_max = 2.20` só pra demonstrar a tela de bilhete populada — cada análise grava o
 `config_efetivo` que a produziu, e o dash mostra essa faixa no topo da aba Análises.
 
+## Camada de analistas (canais do YouTube)
+
+O contexto que a máquina não vê — desfalque, escalação, moral, o palpite do canal — entra pelo
+pipeline de ingestão e é **medido como todos os outros**: cada analista tem placar próprio, cada
+palpite liquida contra o placar real, e o peso (2–15) recalibra sozinho a cada 30 palpites. Nada
+empurra a nota pra confiança máxima; a dúvida freia mais que o entusiasmo empurra.
+
+**Migrações (rodar no SQL editor do Supabase, uma vez):** `supabase/migracao-analistas.sql`
+(tabelas + view + seed dos 4 canais), `supabase/migracao-faro.sql` (Parte B/1), `supabase/
+migracao-conciliacao.sql` (Parte 2).
+
+### Pipeline automático — roda no PC (Task Scheduler)
+
+O YouTube bloqueia scraping de IP de datacenter (consent/captcha), então a ingestão roda no PC do
+Maikon, com IP residencial:
+
+```bash
+npm run ingerir-analistas              # todos os canais ativos
+npm run ingerir-analistas -- @freitastipster   # um canal só
+```
+
+Por canal ativo: resolve o `channel_id` do @handle → lê o RSS (sem API key) → baixa a transcrição
+(timedtext; sem legenda = marca e segue) → extrai com a **API Anthropic (Haiku)** em JSON
+estruturado (separa fato/opinião/dado citado, categoriza, quebra bilhete múltiplo em palpites,
+traduz o formato do Freitas: bloco **MENOR** = convicção alta, **MAIOR** = média) → grava em
+`analista_conteudos` + `analista_extracoes` com o **custo por execução logado**. Falha de extração
+nunca derruba o pipeline.
+
+**Pré-requisito:** `ANTHROPIC_API_KEY` no `.env`. Sem a chave, o pipeline faz tudo até a extração e
+para ali (transcrição salva); preencha a chave e rode de novo.
+
+**Custo:** modelo `claude-haiku-4-5` (US$ 1 / 5 por 1M tokens in/out). Um vídeo de ~14k tokens de
+transcrição custa da ordem de US$ 0,01–0,03. Com 4 canais, 1 vídeo/dia, 2 runs/dia, a projeção é de
+poucos dólares/mês — o próprio script imprime o custo do run e uma projeção ao final.
+
+**Agendar 2x/dia** (~8h e ~17h) no Windows Task Scheduler:
+
+1. Task Scheduler → *Create Task* → *Triggers*: New → Daily → 08:00; repita pra 17:00.
+2. *Actions*: New → Program `node` → Arguments `scripts/ingerir-analistas.mjs` → *Start in* a raiz
+   do projeto (`C:\Users\Cliente\Desktop\bella-bets`).
+3. *Conditions*: desmarque "só com energia da tomada" se for notebook.
+
+### Bootstrap manual (ponte até a chave chegar)
+
+Enquanto a `ANTHROPIC_API_KEY` não libera, dá pra validar a cadeia inteira processando o conteúdo à
+mão no **mesmo formato** do extrator, marcado `processado_por='manual_bootstrap'` (aparece com o selo
+"manual" no card):
+
+```bash
+cp data/analistas-manual.exemplo.json data/analistas-manual.json   # edite com o conteúdo real
+npm run bootstrap-analistas                                        # insere as extrações
+npm run analisar                                                   # o motor casa por partida
+```
+
+O `.exemplo.json` documenta o formato exato (fato consensual → alerta laranja, MENOR/MAIOR, bilhete
+quebrado, mercado fora do motor). O `data/analistas-manual.json` real é gitignorado.
+
 ## Ferramentas
 
 ### `npm run medir-viewport -- <url> [largura] [altura]`

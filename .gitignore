@@ -13,3 +13,6 @@ backup/
 # Harness de medicao de viewport — gerado, nao versionado.
 viewport.html
 src/_viewport.tsx
+
+# Conteúdo real do bootstrap manual dos analistas (o .exemplo.json fica versionado).
+data/analistas-manual.json
