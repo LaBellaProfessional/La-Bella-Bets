@@ -58,6 +58,11 @@ export interface EntradaFaro {
   data: string; perna: Perna; odd_real: number; stake: number; casa_odd: string | null; snapshot: SnapshotMetodo;
 }
 
+/** Payload da múltipla própria (Parte 1): N pernas + odd TOTAL manual (não multiplica) + stake. */
+export interface EntradaMultipla {
+  data: string; pernas: Perna[]; odd_total: number; stake: number; casa_odd: string | null;
+}
+
 export interface SalvarRascunho {
   (r: { chave: string; data: string; partida: string | null; mercado: string | null; odd_casa: number | null; stake: number | null }): void;
 }
@@ -69,7 +74,7 @@ function normalizarOdd(bruto: string): number | null {
 }
 
 export function Inicio({
-  janela, config, carregando, jaRegistrados, rascunhos, onRegistrar, onApostarFaro, onSalvarRascunho, onAnalisar,
+  janela, config, carregando, jaRegistrados, rascunhos, onRegistrar, onApostarFaro, onMontarBilhete, onSalvarRascunho, onAnalisar,
 }: {
   janela: Analise[];
   config?: Config;
@@ -78,6 +83,7 @@ export function Inicio({
   rascunhos: Map<string, Rascunho>;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
   onApostarFaro: (e: EntradaFaro) => Promise<unknown>;
+  onMontarBilhete: (e: EntradaMultipla) => Promise<unknown>;
   onSalvarRascunho: SalvarRascunho;
   onAnalisar?: () => void;
 }) {
@@ -107,7 +113,8 @@ export function Inicio({
       {janela.map((a) => (
         <DiaBloco
           key={a.data} analise={a} config={config} registrados={registrados} registrosPendentes={pendentes}
-          rascunhos={rascunhos} onRegistrar={onRegistrar} onApostarFaro={onApostarFaro} onSalvarRascunho={onSalvarRascunho}
+          rascunhos={rascunhos} onRegistrar={onRegistrar} onApostarFaro={onApostarFaro}
+          onMontarBilhete={onMontarBilhete} onSalvarRascunho={onSalvarRascunho}
         />
       ))}
       {/* Legenda fixa: separa "solidez" de "chance de ganhar" — a nota nunca promete resultado. */}
@@ -132,7 +139,7 @@ interface InfoNota {
 }
 
 function DiaBloco({
-  analise, config, registrados, registrosPendentes, rascunhos, onRegistrar, onApostarFaro, onSalvarRascunho,
+  analise, config, registrados, registrosPendentes, rascunhos, onRegistrar, onApostarFaro, onMontarBilhete, onSalvarRascunho,
 }: {
   analise: Analise; config?: Config;
   registrados: Set<string>;
@@ -140,6 +147,7 @@ function DiaBloco({
   rascunhos: Map<string, Rascunho>;
   onRegistrar: (e: EntradaRegistro) => Promise<unknown>;
   onApostarFaro: (e: EntradaFaro) => Promise<unknown>;
+  onMontarBilhete: (e: EntradaMultipla) => Promise<unknown>;
   onSalvarRascunho: SalvarRascunho;
 }) {
   const bilhetes = analise.bilhetes ?? [];
@@ -396,7 +404,143 @@ function DiaBloco({
       {faroPorJogo.length > 0 && (
         <SecaoFaro jogos={faroPorJogo} data={analise.data} config={config} onApostarFaro={onApostarFaro} />
       )}
+
+      {/* ── MONTAR BILHETE (Parte 1): múltipla própria — qualquer combinação, odd total manual ── */}
+      {faroPorJogo.length > 0 && (
+        <MontarBilhete jogos={faroPorJogo} data={analise.data} config={config} onMontarBilhete={onMontarBilhete} />
+      )}
     </section>
+  );
+}
+
+/**
+ * MONTAR BILHETE (Parte 1) — a múltipla própria do Maikon. Seleciona 2+ pernas de QUALQUER estado e
+ * QUALQUER jogo (inclusive do mesmo jogo), digita a odd TOTAL da casa (nunca multiplica — ganhos
+ * aumentados e correlação intra-jogo tornam o produto errado), stake e registra. Cada perna leva o
+ * snapshot do que o método diria. Discreto e recolhido por padrão. Respeita o teto diário.
+ */
+function MontarBilhete({
+  jogos, data, config, onMontarBilhete,
+}: {
+  jogos: { partida: string; pernas: Perna[]; hora: string }[];
+  data: string; config?: Config;
+  onMontarBilhete: (e: EntradaMultipla) => Promise<unknown>;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [sel, setSel] = useState<Record<string, Perna>>({});
+  const [oddTotal, setOddTotal] = useState('');
+  const [stake, setStake] = useState<number>(+(((config?.banca ?? 1000) * 1) / 100).toFixed(2));
+  const [estado, setEstado] = useState<'ocioso' | 'enviando' | 'ok' | 'erro'>('ocioso');
+  const [erro, setErro] = useState<string | null>(null);
+
+  const chave = (p: Perna) => `${p.partida}|${p.mercado}`;
+  const selecionadas = Object.values(sel);
+  const tetoPct = config?.teto_exposicao_diaria_pct ?? 8;
+  const tetoRs = +(((config?.banca ?? 1000) * tetoPct) / 100).toFixed(2);
+  const odd = normalizarOdd(oddTotal) ?? 0;
+  const acimaTeto = stake > tetoRs;
+  // Pernas que contrariam o método (não aprovadas) — aviso de 1 linha, mesmo padrão do faro.
+  const contrarias = selecionadas.filter((p) => !(p.aprovada && !p.radar && !p.aguarda_odd));
+
+  function alternar(p: Perna) {
+    setSel((s) => { const n = { ...s }; if (n[chave(p)]) delete n[chave(p)]; else n[chave(p)] = p; return n; });
+    if (estado === 'ok') setEstado('ocioso');
+  }
+
+  async function registrar() {
+    setEstado('enviando'); setErro(null);
+    try {
+      await onMontarBilhete({ data, pernas: selecionadas, odd_total: odd, stake, casa_odd: selecionadas[0]?.casa_odd ?? null });
+      setEstado('ok'); setSel({}); setOddTotal('');
+    } catch (e) { setEstado('erro'); setErro(e instanceof Error ? e.message : String(e)); }
+  }
+
+  return (
+    <div className="mt-3 border-t border-borda pt-3">
+      <button onClick={() => setAberto((v) => !v)} className="flex w-full items-center gap-2 text-left">
+        <span className="rounded bg-roxo/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-roxo">bilhete</span>
+        <span className="flex-1 text-xs text-t3">Montar bilhete — múltipla própria (odd total da casa)</span>
+        <span className="text-xs text-t3">{aberto ? 'ocultar' : 'ver'}</span>
+      </button>
+      {aberto && (
+        <div className="mt-3">
+          <p className="mb-2 text-[11px] leading-snug text-t3">
+            Marque as pernas (de qualquer jogo, inclusive do mesmo), digite a <b>odd total</b> que a
+            casa mostrou (com ganhos aumentados, se houver) e o stake. Registra como <b className="text-roxo">FARO</b>.
+          </p>
+          <div className="space-y-2">
+            {jogos.map((j) => (
+              <div key={j.partida} className="overflow-hidden rounded-lg border border-borda bg-card">
+                <div className="border-b border-borda px-3 py-1.5 text-[11px] font-medium text-t2 break-words">{j.partida}</div>
+                <div className="divide-y divide-borda">
+                  {j.pernas.map((p) => {
+                    const on = Boolean(sel[chave(p)]);
+                    const snap = snapshotDaPerna(p);
+                    return (
+                      <button
+                        key={p.mercado} onClick={() => alternar(p)}
+                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left ${on ? 'bg-roxo/10' : ''}`}
+                      >
+                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[10px] ${on ? 'border-roxo bg-roxo text-white' : 'border-borda text-transparent'}`}>✓</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="text-xs text-t1 break-words">{rotuloMercado(p.mercado)}</span>
+                          <span className="ml-1 text-[10px] text-t3">{metodoDiria(snap)}</span>
+                        </span>
+                        {p.odd != null && <span className="font-mono text-[11px] text-t3">@{p.odd}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Rodapé fixo do bilhete em montagem. */}
+          {selecionadas.length > 0 && (
+            <div className="mt-3 rounded-xl border border-roxo/30 bg-roxo/5 p-3">
+              <div className="text-[11px] text-t2">
+                {selecionadas.length} {selecionadas.length === 1 ? 'perna' : 'pernas'}:{' '}
+                {selecionadas.map((p) => rotuloMercado(p.mercado)).join('  +  ')}
+              </div>
+              {contrarias.length > 0 && (
+                <div className="mt-1 text-[11px] leading-snug text-ambar">
+                  {contrarias.length} {contrarias.length === 1 ? 'perna contraria' : 'pernas contrariam'} o método — registrando por convicção própria
+                </div>
+              )}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <span className="text-[11px] text-t3">Odd total</span>
+                <input
+                  type="text" inputMode="decimal" value={oddTotal}
+                  onChange={(e) => { setOddTotal(e.target.value); if (estado === 'erro') setEstado('ocioso'); }}
+                  placeholder="da casa"
+                  className="w-24 rounded border border-borda bg-fundo px-2 py-1 font-mono text-sm text-t1 outline-none focus:border-roxo"
+                />
+                <span className="text-[11px] text-t3">R$</span>
+                <input
+                  type="number" step="0.01" inputMode="decimal" value={stake}
+                  onChange={(e) => setStake(Number(e.target.value))}
+                  className="w-20 rounded border border-borda bg-fundo px-2 py-1 text-sm text-t1 outline-none focus:border-roxo"
+                />
+                <button
+                  disabled={estado === 'ok' || estado === 'enviando' || odd <= 1 || acimaTeto || stake <= 0}
+                  onClick={registrar}
+                  className={`ml-auto rounded px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed ${
+                    estado === 'ok' ? 'bg-roxo/20 text-roxo' : 'bg-roxo text-white disabled:bg-borda disabled:text-t3'}`}
+                >
+                  {estado === 'ok' ? 'registrado ✓' : estado === 'enviando' ? 'registrando…' : odd <= 1 ? 'Digite a odd total' : acimaTeto ? 'acima do teto' : 'Registrar bilhete'}
+                </button>
+              </div>
+              {acimaTeto && <div className="mt-1 text-[11px] text-vermelho">stake acima do teto de {tetoPct}% ({brl(tetoRs)})</div>}
+              {estado === 'erro' && (
+                <div className="mt-1.5 rounded border border-vermelho/40 bg-vermelho/10 px-2 py-1 text-[11px] leading-snug text-vermelho break-words">
+                  Não registrou: {erro}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

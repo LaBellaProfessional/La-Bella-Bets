@@ -169,13 +169,16 @@ export interface SnapshotMetodo {
 
 export interface Registro {
   id: string; data: string; registrado_em: string;
-  pernas: { partida: string; mercado: string; rotulo?: string; odd: number | null; hora?: string | null }[];
+  pernas: { partida: string; mercado: string; rotulo?: string; odd: number | null; hora?: string | null; snapshot?: SnapshotMetodo }[];
   odd_total: number; odd_referencia?: number | null; casa_odd?: string | null; prob_combinada: number; ev_pct: number;
   stake_real: number; resultado: 'pendente' | 'ganhou' | 'perdeu' | 'cancelada';
   retorno_rs: number; banca_depois: number | null; resolvido_em?: string | null;
   // Proveniência (Parte B): 'metodo' (default, fluxo normal) · 'maikon_faro' · 'analistas'.
   origem?: 'metodo' | 'maikon_faro' | 'analistas';
-  snapshot_metodo?: SnapshotMetodo | null;
+  // Tipo (Parte 1): 'simples' (default) · 'multipla_propria' (bilhete montado, odd total manual).
+  tipo?: 'simples' | 'multipla_propria';
+  snapshot_metodo?: (SnapshotMetodo & { pernas?: unknown[] }) | null;
+  n_pernas?: number;
 }
 
 /**
@@ -221,14 +224,24 @@ export interface SugLiquidada { status: string; gols_casa: number | null; gols_f
  * qualquer perna não tiver placar, continua 'pendente'. A confirmação (que move a banca)
  * continua manual — a pré-sugestão só adianta o dedo.
  */
+export interface LegDetalhe { partida: string; mercado: string; rotulo: string; resultado: 'ganhou' | 'perdeu' | 'pendente' }
+
 export function classificarAposta(
   b: Registro,
   sug: Map<string, SugLiquidada>,
-): { estado: EstadoAposta; pre?: { resultado: 'ganhou' | 'perdeu'; placar: string } } {
-  if (b.resultado !== 'pendente') return { estado: b.resultado };
-  const chaves = b.pernas.map((p) => `${b.data}|${p.partida}|${p.mercado}`);
-  const casadas = chaves.map((k) => sug.get(k));
-  if (casadas.some((m) => !m || m.status === 'pendente')) return { estado: 'pendente' };
+): { estado: EstadoAposta; pre?: { resultado: 'ganhou' | 'perdeu'; placar: string }; legs?: LegDetalhe[]; bateram?: number } {
+  // Detalhe perna a perna (Parte 1.3): pra CADA perna, o que a liquidação virtual sabe. Uma perna
+  // de mercado que o método não cobre (faro reprovado) pode não estar no índice → fica 'pendente'.
+  const casadas = b.pernas.map((p) => sug.get(`${b.data}|${p.partida}|${p.mercado}`));
+  const legs: LegDetalhe[] = b.pernas.map((p, i) => ({
+    partida: p.partida, mercado: p.mercado, rotulo: p.rotulo ?? rotuloMercado(p.mercado),
+    resultado: casadas[i] && casadas[i]!.status !== 'pendente' ? (casadas[i]!.status as 'ganhou' | 'perdeu') : 'pendente',
+  }));
+  const bateram = legs.filter((l) => l.resultado === 'ganhou').length;
+
+  if (b.resultado !== 'pendente') return { estado: b.resultado, legs, bateram };
+  if (casadas.some((m) => !m || m.status === 'pendente')) return { estado: 'pendente', legs, bateram };
+  // Bilhete só GANHA se TODAS as pernas ganharem (Parte 1.3).
   const resultado: 'ganhou' | 'perdeu' = casadas.every((m) => m!.status === 'ganhou') ? 'ganhou' : 'perdeu';
   // Placar por jogo (uma aposta pode cruzar dois jogos): "2x1" simples, "Casa 2x1 · Outro 0x0".
   const porJogo = new Map<string, SugLiquidada>();
@@ -237,7 +250,7 @@ export function classificarAposta(
   const placar = jogos.length === 1
     ? `${jogos[0][1].gols_casa}x${jogos[0][1].gols_fora}`
     : jogos.map(([part, m]) => `${part.split(' x ')[0]} ${m.gols_casa}x${m.gols_fora}`).join(' · ');
-  return { estado: 'aguardando', pre: { resultado, placar } };
+  return { estado: 'aguardando', pre: { resultado, placar }, legs, bateram };
 }
 
 export interface Config {
@@ -380,6 +393,33 @@ export function useAlterarResultado() {
   });
 }
 
+/**
+ * CONCILIAÇÃO COM A CASA (Parte 2). O saldo da bet365 é autoritativo. Casa a banca consolidada ao
+ * saldo real: como o saldo da casa é o DISPONÍVEL (dinheiro fora de aposta aberta), a banca nova =
+ * saldo da casa + o que está em jogo. Registra o ajuste em bilhete_eventos (tipo='ajuste_banca',
+ * de/para em R$, detalhe com o saldo informado e o em-jogo). Auditado, reversível pela leitura.
+ */
+export function useConciliarBanca() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (e: { bancaAtual: number; emJogo: number; saldoCasa: number }) => {
+      const novaBanca = +(e.saldoCasa + e.emJogo).toFixed(2);
+      const { error } = await supabase.from('config').update({ banca: novaBanca, atualizado_em: new Date().toISOString() }).eq('id', 1);
+      if (error) throw error;
+      // Rastro do ajuste — best-effort (precisa da migração de conciliação pra ter tipo/bilhete_id null).
+      try {
+        await supabase.from('bilhete_eventos').insert({
+          bilhete_id: null, tipo: 'ajuste_banca',
+          de: String(e.bancaAtual.toFixed(2)), para: String(novaBanca.toFixed(2)),
+          detalhe: JSON.stringify({ saldo_casa: e.saldoCasa, em_jogo: e.emJogo, antes: e.bancaAtual, depois: novaBanca }),
+        });
+      } catch { /* rastro é acessório */ }
+      return novaBanca;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['config'] }),
+  });
+}
+
 /* ─────────────────────────── RASCUNHO PERSISTENTE ─────────────────────────── */
 
 export interface Rascunho {
@@ -518,6 +558,47 @@ export function useApostarFaro() {
       qc.invalidateQueries({ queryKey: ['bilhetes'] });
       qc.invalidateQueries({ queryKey: ['rascunhos'] });
     },
+  });
+}
+
+/**
+ * MÚLTIPLA PRÓPRIA DO MAIKON (Parte 1) — bilhete montado à mão com QUALQUER combinação de pernas
+ * (qualquer estado, qualquer jogo, inclusive do mesmo jogo). A odd TOTAL é DIGITADA, nunca
+ * multiplicada: ganhos aumentados e correlação intra-jogo tornam o produto das pernas errado.
+ * Grava origem='maikon_faro', tipo (simples/multipla_propria) e o snapshot do método de CADA perna.
+ * `data` pode ser retroativa (bilhete já feito na casa) — o registro aceita.
+ */
+export function useMontarBilheteFaro() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (e: { data: string; pernas: Perna[]; odd_total: number; stake: number; casa_odd: string | null }) => {
+      const tipo = e.pernas.length > 1 ? 'multipla_propria' : 'simples';
+      // prob combinada aproximada (produto — referência apenas; a odd real é a manual).
+      const prob = e.pernas.reduce((acc, p) => acc * (p.prob_final ?? p.prob_heuristica ?? 1), 1);
+      const snaps = e.pernas.map((p) => ({ partida: p.partida, mercado: p.mercado, ...snapshotDaPerna(p) }));
+      const { error } = await supabase.from('bilhetes').insert({
+        data: e.data,
+        pernas: e.pernas.map((p) => ({
+          partida: p.partida, mercado: p.mercado, rotulo: rotuloMercado(p.mercado),
+          odd: p.odd ?? null, hora: p.hora ?? null, snapshot: snapshotDaPerna(p),
+        })),
+        n_pernas: e.pernas.length,
+        odd_total: e.odd_total,           // MANUAL — não multiplica
+        odd_referencia: null,
+        casa_odd: e.casa_odd,
+        prob_combinada: prob,
+        ev_pct: (prob * e.odd_total - 1) * 100,
+        stake_sugerido: e.stake,
+        stake_real: e.stake,
+        ligas: [...new Set(e.pernas.map((p) => p.liga))],
+        mercados: [...new Set(e.pernas.map((p) => p.mercado))],
+        faixa_odd: e.odd_total < 1.5 ? '1.40-1.50' : e.odd_total < 1.6 ? '1.50-1.60' : '1.60+',
+        confianca: 'faro', origem: 'maikon_faro', tipo,
+        snapshot_metodo: { tipo, pernas: snaps },
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['bilhetes'] }),
   });
 }
 

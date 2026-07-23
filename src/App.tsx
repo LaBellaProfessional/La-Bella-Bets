@@ -5,7 +5,7 @@ import { Login } from './Login';
 import {
   useConfig, useDatas, useAnalise, useBilhetes, useSugestoes,
   useAlterarResultado, useSalvarConfig, useRodarMotor, useJanelaCompleta, useRegistrarEntrada,
-  useApostarFaro, useRascunhos, useSalvarRascunho, indiceSugestoes, classificarAposta,
+  useApostarFaro, useMontarBilheteFaro, useConciliarBanca, useRascunhos, useSalvarRascunho, indiceSugestoes, classificarAposta,
   brl, emJogoDe, saldoDaSemana, type Registro,
 } from './dados';
 import { Inicio } from './telas/Inicio';
@@ -77,6 +77,8 @@ function Dash() {
 
   const registrar = useRegistrarEntrada();
   const apostarFaro = useApostarFaro();
+  const montarBilhete = useMontarBilheteFaro();
+  const conciliar = useConciliarBanca();
   const alterarResultado = useAlterarResultado();
   const salvarRascunho = useSalvarRascunho();
   const salvarConfig = useSalvarConfig();
@@ -164,6 +166,7 @@ function Dash() {
             // Com mutate, a falha morre no estado do hook e a tela finge que nada aconteceu.
             onRegistrar={(e) => registrar.mutateAsync(e)}
             onApostarFaro={(e) => apostarFaro.mutateAsync(e)}
+            onMontarBilhete={(e) => montarBilhete.mutateAsync(e)}
             onSalvarRascunho={(r) => salvarRascunho.mutate(r)}
             onAnalisar={() => rodar('analisar')}
           />
@@ -174,6 +177,7 @@ function Dash() {
             sugIndex={sugIndex}
             banca={config.banca}
             onAlterar={(registro, novo, detalhe) => alterarResultado.mutateAsync({ registro, novo, banca: config.banca, detalhe })}
+            onConciliar={(saldoCasa, emJogo) => conciliar.mutateAsync({ bancaAtual: config.banca, emJogo, saldoCasa })}
           />
         )}
         {aba === 'analises' && <Analises analise={analise ?? null} />}

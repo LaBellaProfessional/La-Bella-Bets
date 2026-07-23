@@ -19,9 +19,22 @@ end $$;
 
 -- Foto do estado do MÉTODO no momento do faro: veredito (aprovada|radar|reprovada|aguarda_odd|
 -- sem_modelo), motivo, D-N até o jogo, odd justa, prob do modelo, nota. É o que permite medir o
--- faro CONTRA o método — o breakdown por "motivo contrariado" sai daqui.
+-- faro CONTRA o método — o breakdown por "motivo contrariado" sai daqui. Numa múltipla própria,
+-- snapshot_metodo.pernas guarda o estado-do-método de CADA perna (Parte 1).
 alter table public.bilhetes
   add column if not exists snapshot_metodo jsonb;
+
+-- Tipo do registro: 'simples' (default, tudo que já existe) ou 'multipla_propria' (bilhete montado
+-- pelo Maikon com odd TOTAL manual — promoções/ganhos aumentados e correlação intra-jogo tornam a
+-- multiplicação das pernas errada, então a odd é digitada, não calculada).
+alter table public.bilhetes
+  add column if not exists tipo text not null default 'simples';
+
+do $$ begin
+  alter table public.bilhetes drop constraint if exists bilhetes_tipo_check;
+  alter table public.bilhetes add constraint bilhetes_tipo_check
+    check (tipo in ('simples','multipla_propria'));
+end $$;
 
 create index if not exists bilhetes_origem_idx on public.bilhetes (origem);
 

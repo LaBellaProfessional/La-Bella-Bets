@@ -146,7 +146,10 @@ function SubabaAnalistas({ reais, sugestoes }: { reais: RegistroUI[]; sugestoes:
   const porOrigem = (o: Registro['origem']) =>
     reais.filter((r) => (r.origem ?? 'metodo') === o && (r.resultado === 'ganhou' || r.resultado === 'perdeu'));
   const metodo = agregarReais(porOrigem('metodo'));
-  const faro = agregarReais(porOrigem('maikon_faro'));
+  const faroRegs = porOrigem('maikon_faro');
+  const faro = agregarReais(faroRegs);
+  const nMulti = faroRegs.filter((r) => (r.tipo ?? 'simples') === 'multipla_propria').length;
+  const faroSub = faroRegs.length ? `simples ${faroRegs.length - nMulti} · múltipla ${nMulti}` : undefined;
   const ressus = agregarReais(porOrigem('analistas'));
 
   // MODELO: sugestões virtuais liquidadas (ROI só onde havia odd de mercado).
@@ -172,10 +175,10 @@ function SubabaAnalistas({ reais, sugestoes }: { reais: RegistroUI[]; sugestoes:
     resultado: somaAnalistas.comOdd ? somaAnalistas.lucro : null, unidade: 'u', clv: null,
   };
 
-  const tripulacao: { rotulo: string; cor: string; f: Forca }[] = [
+  const tripulacao: { rotulo: string; cor: string; f: Forca; sub?: string }[] = [
     { rotulo: 'MODELO', cor: 'text-azul', f: modelo },
     { rotulo: 'MAIKON+MÉTODO', cor: 'text-t1', f: metodo },
-    { rotulo: 'MAIKON FARO', cor: 'text-roxo', f: faro },
+    { rotulo: 'MAIKON FARO', cor: 'text-roxo', f: faro, sub: faroSub },
     { rotulo: 'ANALISTAS', cor: 'text-laranja', f: analistas },
     { rotulo: 'RESSUSCITADAS', cor: 'text-laranja', f: ressus },
   ];
@@ -188,7 +191,7 @@ function SubabaAnalistas({ reais, sugestoes }: { reais: RegistroUI[]; sugestoes:
           <span className="text-[11px] text-t3">cada força medida, nenhuma descartada</span>
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {tripulacao.map((t) => <CardForca key={t.rotulo} rotulo={t.rotulo} cor={t.cor} f={t.f} />)}
+          {tripulacao.map((t) => <CardForca key={t.rotulo} rotulo={t.rotulo} cor={t.cor} f={t.f} sub={t.sub} />)}
         </div>
       </div>
 
@@ -224,13 +227,14 @@ function agregarReais(regs: RegistroUI[]): Forca {
   return { n: regs.length, acerto: regs.length ? ganhou / regs.length : null, resultado: regs.length ? lucro : null, unidade: 'R$', clv };
 }
 
-function CardForca({ rotulo, cor, f }: { rotulo: string; cor: string; f: Forca }) {
+function CardForca({ rotulo, cor, f, sub }: { rotulo: string; cor: string; f: Forca; sub?: string }) {
   const resStr = f.resultado == null ? '—'
     : f.unidade === 'R$' ? `${f.resultado >= 0 ? '+' : '−'}${brl(Math.abs(f.resultado))}`
     : `${f.resultado >= 0 ? '+' : '−'}${Math.abs(f.resultado).toFixed(1)}u`;
   return (
     <div className="rounded-lg border border-borda bg-card px-3 py-3">
       <div className={`text-[11px] font-bold uppercase tracking-wider ${cor}`}>{rotulo}</div>
+      {sub && <div className="text-[10px] text-t3">{sub}</div>}
       {f.n === 0 ? (
         <div className="mt-1 text-xs text-t3">sem amostra ainda</div>
       ) : (
