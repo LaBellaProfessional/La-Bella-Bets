@@ -85,6 +85,8 @@ export const MOTIVO = {
     `vitória seca com ${(p * 100).toFixed(0)}% — abaixo do gatilho de ${(gatilho * 100).toFixed(0)}% exigido sem preço de mercado`,
   CONVICCAO_BAIXA: (p, piso) =>
     `${(p * 100).toFixed(0)}% de convicção do modelo, abaixo do mínimo de ${(piso * 100).toFixed(0)}% pra sugerir sem preço de mercado`,
+  PREMIO_INEXISTENTE: (justa, min) =>
+    `odd justa @${justa.toFixed(2)} abaixo de @${min.toFixed(2)} — pra pagar acima do justo a casa teria que ofertar o que não oferta`,
 };
 
 /**

@@ -56,12 +56,17 @@ export function avaliarPerna({ jogo, mercado, odd, probH, probDC, probPush, amos
       const gatilho = (filtros.gatilho_1x2 ?? 72) / 100;   // vitória seca só com convicção alta
       if (probFinal < gatilho) return { ...sem, aprovada: false, motivo: MOTIVO.GATILHO_1X2(probFinal, gatilho) };
     }
-    const pisoManual = (filtros.convicao_minima_sem_odd ?? 50) / 100;
+    const pisoManual = (filtros.convicao_minima_sem_odd ?? 60) / 100;
     if (probFinal < pisoManual) return { ...sem, aprovada: false, motivo: MOTIVO.CONVICCAO_BAIXA(probFinal, pisoManual) };
+    // Corte de PRÊMIO INEXISTENTE: mercado com odd justa muito baixa (prob altíssima) não vira card
+    // — a casa não paga acima de ~1.25 nesses, então não há margem possível pra digitar.
+    const oddJusta = +(1 / probFinal).toFixed(2);
+    const oddJustaMin = filtros.odd_justa_minima_sem_odd ?? 1.25;
+    if (oddJusta < oddJustaMin) return { ...sem, aprovada: false, odd_justa: oddJusta, motivo: MOTIVO.PREMIO_INEXISTENTE(oddJusta, oddJustaMin) };
     return {
       ...sem,
       aprovada: true,
-      odd_justa: +(1 / probFinal).toFixed(2),
+      odd_justa: oddJusta,
       confianca: CONFIANCA.REBAIXADA,
       dixon_coles_disponivel: temDC,
       amostra_curta: amostraCurta,
