@@ -279,8 +279,13 @@ function CardEntrada({
   const nAnalistas = analistasConcordam(p, contexto);
   const laranja = contexto?.consenso_laranja;
   const selecionado = Boolean(selecionadas[`${p.jogo_id}|${p.mercado}`]);
-  // Contra o veredito, ou entrada que não é "aprovada agora" → grava como faro (com snapshot).
+  // GRAVAÇÃO (invisível): contra o veredito, ou entrada que não é "aprovada agora" → grava como
+  // faro (com snapshot), pra calibração. VISUAL: o botão âmbar "assim mesmo" e o aviso só aparecem
+  // quando a odd digitada NÃO vale — aí sim você aposta contra o veredito. Se vale, é "Registrar"
+  // normal, mesmo numa entrada que a casa ainda não precificou (senão o verde e o âmbar se
+  // contradizem: um diz "vale", o outro diz "método não recomenda" sobre a mesma odd).
   const usarFaro = !vale || cat !== 'agora';
+  const contraVeredito = odd > 1 && !vale;
   const registrado = estado === 'ok';
 
   async function registrar() {
@@ -370,16 +375,16 @@ function CardEntrada({
             onClick={registrar}
             className={`ml-auto rounded px-3 py-1.5 text-sm font-semibold disabled:cursor-not-allowed ${
               registrado ? 'bg-verde/20 text-verde'
-                : usarFaro && odd > 1 ? 'bg-ambar text-white'
+                : contraVeredito ? 'bg-ambar text-white'
                 : 'bg-rosa text-white disabled:bg-borda disabled:text-t3'}`}
           >
             {registrado ? 'registrado ✓'
               : estado === 'enviando' ? 'registrando…'
               : odd <= 1 ? 'Digite a odd'
-              : usarFaro ? 'Registrar assim mesmo' : 'Registrar'}
+              : contraVeredito ? 'Registrar assim mesmo' : 'Registrar'}
           </button>
         </div>
-        {usarFaro && odd > 1 && !registrado && (
+        {contraVeredito && !registrado && (
           <div className="mt-1 text-[11px] leading-snug text-ambar">
             O método não recomenda nessa odd — registrando por convicção própria.
           </div>
