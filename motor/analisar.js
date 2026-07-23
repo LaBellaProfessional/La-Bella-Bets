@@ -177,11 +177,11 @@ async function main() {
     log('');
   }
 
-  gravarAnalise({ modo, jogos, pernas, resultado, cardsAH, dc: dcPorLiga });
+  gravarAnalise({ modo, jogos, historico, pernas, resultado, cardsAH, dc: dcPorLiga });
   log(`💾 data/analises/${dataAlvo}.json gravado\n`);
 }
 
-function gravarAnalise({ modo, jogos, pernas, resultado, cardsAH, dc }) {
+function gravarAnalise({ modo, jogos, historico, pernas, resultado, cardsAH, dc }) {
   const saida = {
     data: dataAlvo,
     modo,
